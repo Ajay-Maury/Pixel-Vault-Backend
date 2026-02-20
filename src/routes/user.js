@@ -16,8 +16,14 @@ router.post('/register', async (req, res) => {
       'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
       [email.toLowerCase(), password_hash]
     );
+    console.log('[USER] User registered:', { id: result.rows[0].id, email: result.rows[0].email });
     res.status(201).json({ user: result.rows[0] });
   } catch (err) {
+    console.error('[USER REGISTER ERROR]', {
+      message: err.message,
+      stack: err.stack,
+      email: email
+    });
     res.status(500).json({ message: err.message });
   }
 });
@@ -29,11 +35,24 @@ router.post('/login', async (req, res) => {
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      console.warn('[USER LOGIN] Failed login attempt:', { email });
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+    
+    if (!process.env.JWT_SECRET) {
+      console.error('[USER LOGIN] JWT_SECRET not set');
+      return res.status(500).json({ message: 'Server configuration error' });
+    }
+    
     const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    console.log('[USER] User logged in:', { id: user.id, email: user.email });
     res.json({ token, user: { id: user.id, email: user.email } });
   } catch (err) {
+    console.error('[USER LOGIN ERROR]', {
+      message: err.message,
+      stack: err.stack,
+      email: email
+    });
     res.status(500).json({ message: err.message });
   }
 });
