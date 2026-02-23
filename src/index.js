@@ -211,6 +211,8 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
 app.use('/api/user', require('./routes/user'));
 app.use('/api/image', require('./routes/image'));
 
