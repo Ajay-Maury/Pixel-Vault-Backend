@@ -1,4 +1,6 @@
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 
 if (!process.env.DATABASE_URL) {
   console.error('[DB ERROR] DATABASE_URL is not set');
@@ -29,25 +31,36 @@ pool.on('remove', () => {
   console.log('[DB INFO] Connection removed from pool');
 });
 
-// Test connection on startup with proper error handling
-const testConnection = () => {
-  return new Promise((resolve) => {
-    pool.query('SELECT NOW()', (err, res) => {
-      if (err) {
-        console.error('[DB CONNECTION ERROR]', {
-          message: err.message,
-          code: err.code,
-          detail: err.detail || 'Check DATABASE_URL and ensure PostgreSQL is running'
-        });
-        process.exit(1);
-      } else {
-        console.log('[DB SUCCESS] Connected to PostgreSQL at', res.rows[0].now);
-        resolve(true);
-      }
-    });
-  });
+
+// Run schema.sql to create tables if not exists
+const runMigrations = async () => {
+  const schemaPath = path.join(__dirname, 'schema.sql');
+  const sql = fs.readFileSync(schemaPath, 'utf8');
+  try {
+    await pool.query(sql);
+    console.log('[DB MIGRATION] schema.sql applied (tables ensured)');
+  } catch (err) {
+    console.error('[DB MIGRATION ERROR]', err.message);
+    throw err;
+  }
 };
 
-// Export both pool and the connection test
+// Test connection and run migrations
+const testConnection = async () => {
+  try {
+    await pool.query('SELECT NOW()');
+    console.log('[DB SUCCESS] Connected to PostgreSQL');
+    await runMigrations();
+    return true;
+  } catch (err) {
+    console.error('[DB CONNECTION ERROR]', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail || 'Check DATABASE_URL and ensure PostgreSQL is running'
+    });
+    process.exit(1);
+  }
+};
+
 module.exports = pool;
 module.exports.testConnection = testConnection;
