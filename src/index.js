@@ -4,13 +4,86 @@ const cors = require('cors');
 const db = require('./db');
 const app = express();
 
-// Validate required environment variables
-const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'];
-const missingEnvVars = requiredEnvVars.filter(v => !process.env[v]);
+// Validate required environment variables with detailed error messages
+const ENV_VARS_SCHEMA = {
+  PORT: {
+    required: true,
+    description: 'Server port (e.g., 5000)',
+    hint: 'Add PORT=5000 to your .env file'
+  },
+  NODE_ENV: {
+    required: true,
+    description: 'Node environment (development, production, etc.)',
+    hint: 'Add NODE_ENV=development or NODE_ENV=production to your .env file'
+  },
+  DATABASE_URL: {
+    required: true,
+    description: 'PostgreSQL connection string',
+    hint: 'Add DATABASE_URL=postgresql://user:password@host:port/database to your .env file'
+  },
+  JWT_SECRET: {
+    required: true,
+    description: 'Secret key for JWT token signing',
+    hint: 'Generate a strong secret and add JWT_SECRET=your_secret_key to your .env file'
+  },
+  MINIO_ENDPOINT: {
+    required: true,
+    description: 'S3/MinIO endpoint (e.g., minio:9000 or s3.amazonaws.com)',
+    hint: 'Add MINIO_ENDPOINT=your-endpoint to your .env file'
+  },
+  MINIO_ACCESS_KEY: {
+    required: true,
+    description: 'S3/MinIO access key',
+    hint: 'Add MINIO_ACCESS_KEY=your_access_key to your .env file'
+  },
+  MINIO_SECRET_KEY: {
+    required: true,
+    description: 'S3/MinIO secret key',
+    hint: 'Add MINIO_SECRET_KEY=your_secret_key to your .env file'
+  },
+  MINIO_BUCKET: {
+    required: true,
+    description: 'S3/MinIO bucket name',
+    hint: 'Add MINIO_BUCKET=your_bucket_name to your .env file'
+  },
+  MINIO_USE_SSL: {
+    required: true,
+    description: 'Use SSL for S3/MinIO connection (true or false)',
+    hint: 'Add MINIO_USE_SSL=true or MINIO_USE_SSL=false to your .env file'
+  }
+};
 
-if (missingEnvVars.length > 0) {
-  console.error(`[STARTUP ERROR] Missing required environment variables: ${missingEnvVars.join(', ')}`);
-  console.error('[STARTUP ERROR] Please check your .env file or environment configuration');
+// Check all required environment variables
+const missingVars = [];
+for (const [varName, config] of Object.entries(ENV_VARS_SCHEMA)) {
+  if (config.required && !process.env[varName]) {
+    missingVars.push({
+      name: varName,
+      description: config.description,
+      hint: config.hint
+    });
+  }
+}
+
+// Exit with detailed error if any variables are missing
+if (missingVars.length > 0) {
+  console.error('\n' + '='.repeat(80));
+  console.error('❌ STARTUP ERROR: Missing required environment variables');
+  console.error('='.repeat(80));
+  
+  missingVars.forEach((variable, index) => {
+    console.error(`\n${index + 1}. ${variable.name}`);
+    console.error(`   Description: ${variable.description}`);
+    console.error(`   Action Required: ${variable.hint}`);
+  });
+  
+  console.error('\n' + '='.repeat(80));
+  console.error('📋 How to fix:');
+  console.error('   1. Copy .env.example to .env: cp .env.example .env');
+  console.error('   2. Edit .env and set all missing variables');
+  console.error('   3. Save the file and restart the application');
+  console.error('='.repeat(80) + '\n');
+  
   process.exit(1);
 }
 
@@ -47,7 +120,7 @@ app.use('/api/image', require('./routes/image'));
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
 
 // Start server after confirming database connection
 const startServer = async () => {

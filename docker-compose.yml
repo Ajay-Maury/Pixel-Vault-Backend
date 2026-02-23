@@ -3,16 +3,16 @@ services:
     image: postgres:17
     container_name: pixelvault-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-pixelvault}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixelvault}
-      POSTGRES_DB: ${POSTGRES_DB:-pixelvault}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pixelvault}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,11 +21,11 @@ services:
     image: minio/minio:latest
     container_name: pixelvault-minio
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
     volumes:
       - minio_data:/minio_root
     command: server /minio_root --console-address ":9001"
@@ -39,15 +39,15 @@ services:
     build: .
     container_name: pixelvault-app
     environment:
-      PORT: ${PORT:-5000}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-pixelvault}:${POSTGRES_PASSWORD:-pixelvault}@postgres:5432/${POSTGRES_DB:-pixelvault}
+      PORT: ${PORT}
+      DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-pixelvault}
-      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
-      NODE_ENV: ${NODE_ENV:-development}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      NODE_ENV: ${NODE_ENV}
     ports:
       - "5000:5000"
     depends_on:

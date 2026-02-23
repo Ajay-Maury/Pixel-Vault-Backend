@@ -6,10 +6,12 @@ startCommand = "node src/index.js"
 restartPolicyMaxRetries = 5
 
 [env]
-DATABASE_URL = { value = "${{ Postgres.DATABASE_URL }}" }
-JWT_SECRET = { value = "${{ secrets.JWT_SECRET }}", required = true }
-MINIO_ENDPOINT = { value = "${{ secrets.MINIO_ENDPOINT }}", required = true }
-MINIO_ACCESS_KEY = { value = "${{ secrets.MINIO_ACCESS_KEY }}", required = true }
-MINIO_SECRET_KEY = { value = "${{ secrets.MINIO_SECRET_KEY }}", required = true }
-MINIO_BUCKET = { value = "pixelvault", required = true }
-MINIO_USE_SSL = { value = "true" }
+PORT = { value = "", required = true }
+DATABASE_URL = { value = "", required = true }
+JWT_SECRET = { value = "", required = true }
+MINIO_ENDPOINT = { value = "", required = true }
+MINIO_ACCESS_KEY = { value = "", required = true }
+MINIO_SECRET_KEY = { value = "", required = true }
+MINIO_BUCKET = { value = "", required = true }
+MINIO_USE_SSL = { value = "", required = true }
+NODE_ENV = { value = "", required = true }
