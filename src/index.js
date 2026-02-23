@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 const db = require('./db');
 const app = express();
 
@@ -26,30 +28,20 @@ const ENV_VARS_SCHEMA = {
     description: 'Secret key for JWT token signing',
     hint: 'Generate a strong secret and add JWT_SECRET=your_secret_key to your .env file'
   },
-  MINIO_ENDPOINT: {
+  CLOUDINARY_CLOUD_NAME: {
     required: true,
-    description: 'S3/MinIO endpoint (e.g., minio:9000 or s3.amazonaws.com)',
-    hint: 'Add MINIO_ENDPOINT=your-endpoint to your .env file'
+    description: 'Cloudinary cloud name',
+    hint: 'Get from your Cloudinary dashboard at https://cloudinary.com/console/settings/account'
   },
-  MINIO_ACCESS_KEY: {
+  CLOUDINARY_API_KEY: {
     required: true,
-    description: 'S3/MinIO access key',
-    hint: 'Add MINIO_ACCESS_KEY=your_access_key to your .env file'
+    description: 'Cloudinary API key',
+    hint: 'Get from your Cloudinary dashboard account settings'
   },
-  MINIO_SECRET_KEY: {
+  CLOUDINARY_API_SECRET: {
     required: true,
-    description: 'S3/MinIO secret key',
-    hint: 'Add MINIO_SECRET_KEY=your_secret_key to your .env file'
-  },
-  MINIO_BUCKET: {
-    required: true,
-    description: 'S3/MinIO bucket name',
-    hint: 'Add MINIO_BUCKET=your_bucket_name to your .env file'
-  },
-  MINIO_USE_SSL: {
-    required: true,
-    description: 'Use SSL for S3/MinIO connection (true or false)',
-    hint: 'Add MINIO_USE_SSL=true or MINIO_USE_SSL=false to your .env file'
+    description: 'Cloudinary API secret',
+    hint: 'Get from your Cloudinary dashboard account settings'
   }
 };
 
@@ -93,6 +85,12 @@ console.log(`[INFO] Node Environment: ${process.env.NODE_ENV || 'development'}`)
 app.use(cors());
 app.use(express.json());
 
+// Swagger UI documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { 
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Pixel Vault API Docs'
+}));
+
 // Global error handling middleware
 app.use((err, req, res, next) => {
   console.error('[ERROR]', {
@@ -108,17 +106,113 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'UP',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
+// Health check helper function
+const getHealthStatus = async () => {
+  const health = {
+    service: 'UP',
+    database: 'DOWN',
+    cloudinary: 'DOWN'
+  };
+
+  // Check database
+  try {
+    await db.testConnection();
+    health.database = 'UP';
+  } catch (err) {
+    console.warn('[HEALTH] Database check failed:', err.message);
+  }
+
+  // Check Cloudinary
+  try {
+    const cloudinary = require('cloudinary').v2;
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+    // Simple test: ping Cloudinary API
+    await new Promise((resolve, reject) => {
+      cloudinary.api.resources({ max_results: 1 }, (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
+    });
+    health.cloudinary = 'UP';
+  } catch (err) {
+    console.warn('[HEALTH] Cloudinary check failed:', err.message);
+  }
+
+  return health;
+};
+
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Detailed health check
+ *     description: Check the health status of the application, database, and Cloudinary integration
+ *     tags:
+ *       - Health
+ *     responses:
+ *       200:
+ *         description: Health status of all services
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [UP, DOWN]
+ *                   description: Overall status
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 version:
+ *                   type: string
+ *                 service:
+ *                   type: string
+ *                   enum: [UP, DOWN]
+ *                   description: Application service status
+ *                 database:
+ *                   type: string
+ *                   enum: [UP, DOWN]
+ *                   description: PostgreSQL database status
+ *                 cloudinary:
+ *                   type: string
+ *                   enum: [UP, DOWN]
+ *                   description: Cloudinary integration status
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+app.get('/api/health', async (req, res) => {
+  try {
+    const health = await getHealthStatus();
+    const overallStatus = health.service === 'UP' && health.database === 'UP' && health.cloudinary === 'UP' ? 'UP' : 'PARTIAL';
+    
+    res.status(health.database === 'UP' ? 200 : 503).json({
+      status: overallStatus,
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      services: health
+    });
+  } catch (err) {
+    console.error('[HEALTH ERROR]', err.message);
+    res.status(503).json({
+      status: 'DOWN',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      services: { service: 'UP', database: 'DOWN', cloudinary: 'DOWN' }
+    });
+  }
 });
+
 app.use('/api/user', require('./routes/user'));
 app.use('/api/image', require('./routes/image'));
-
-app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT;
 
@@ -129,7 +223,7 @@ const startServer = async () => {
     
     const server = app.listen(PORT, () => {
       console.log(`[SUCCESS] Server running on port ${PORT}`);
-      console.log(`[INFO] Health check available at http://localhost:${PORT}/health`);
+      console.log(`[INFO] API documentation available at http://localhost:${PORT}/api-docs`);
     });
 
     // Handle graceful shutdown
