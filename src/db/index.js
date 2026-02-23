@@ -29,17 +29,25 @@ pool.on('remove', () => {
   console.log('[DB INFO] Connection removed from pool');
 });
 
-// Test connection on startup
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('[DB CONNECTION ERROR]', {
-      message: err.message,
-      code: err.code,
-      detail: err.detail
+// Test connection on startup with proper error handling
+const testConnection = () => {
+  return new Promise((resolve) => {
+    pool.query('SELECT NOW()', (err, res) => {
+      if (err) {
+        console.error('[DB CONNECTION ERROR]', {
+          message: err.message,
+          code: err.code,
+          detail: err.detail || 'Check DATABASE_URL and ensure PostgreSQL is running'
+        });
+        process.exit(1);
+      } else {
+        console.log('[DB SUCCESS] Connected to PostgreSQL at', res.rows[0].now);
+        resolve(true);
+      }
     });
-  } else {
-    console.log('[DB SUCCESS] Connected to PostgreSQL', res.rows[0]);
-  }
-});
+  });
+};
 
+// Export both pool and the connection test
 module.exports = pool;
+module.exports.testConnection = testConnection;

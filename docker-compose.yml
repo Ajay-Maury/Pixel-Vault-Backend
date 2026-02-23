@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17
     container_name: pixelvault-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pixelvault}
@@ -60,7 +58,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: npm run dev
+    command: npm run start
 
 volumes:
   postgres_data:

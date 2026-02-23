@@ -2,7 +2,7 @@
 builder = "dockerfile"
 
 [deploy]
-startCommand = "npm install && node src/index.js"
+startCommand = "node src/index.js"
 restartPolicyMaxRetries = 5
 
 [env]

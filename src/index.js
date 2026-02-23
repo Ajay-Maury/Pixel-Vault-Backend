@@ -1,14 +1,16 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const db = require('./db');
 const app = express();
 
 // Validate required environment variables
-const requiredEnvVars = ['DATABASE_URL'];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'];
 const missingEnvVars = requiredEnvVars.filter(v => !process.env[v]);
 
 if (missingEnvVars.length > 0) {
-  console.error(`[STARTUP ERROR] Missing environment variables: ${missingEnvVars.join(', ')}`);
+  console.error(`[STARTUP ERROR] Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  console.error('[STARTUP ERROR] Please check your .env file or environment configuration');
   process.exit(1);
 }
 
@@ -46,27 +48,40 @@ app.use('/api/image', require('./routes/image'));
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
-  console.log(`[SUCCESS] Server running on port ${PORT}`);
-  console.log(`[INFO] Health check available at http://localhost:${PORT}/health`);
-});
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('[INFO] SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('[INFO] Server closed');
-    process.exit(0);
-  });
-});
+// Start server after confirming database connection
+const startServer = async () => {
+  try {
+    await db.testConnection();
+    
+    const server = app.listen(PORT, () => {
+      console.log(`[SUCCESS] Server running on port ${PORT}`);
+      console.log(`[INFO] Health check available at http://localhost:${PORT}/health`);
+    });
 
-process.on('SIGINT', () => {
-  console.log('[INFO] SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    console.log('[INFO] Server closed');
-    process.exit(0);
-  });
-});
+    // Handle graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('[INFO] SIGTERM received, shutting down gracefully...');
+      server.close(() => {
+        console.log('[INFO] Server closed');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      console.log('[INFO] SIGINT received, shutting down gracefully...');
+      server.close(() => {
+        console.log('[INFO] Server closed');
+        process.exit(0);
+      });
+    });
+  } catch (err) {
+    console.error('[STARTUP ERROR] Failed to start server:', err.message);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 process.on('uncaughtException', (err) => {
   console.error('[CRITICAL ERROR] Uncaught Exception:', err);
