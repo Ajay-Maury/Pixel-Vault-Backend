@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const auth = require('../middleware/auth');
 
 /**
  * @swagger
@@ -171,4 +172,69 @@ router.post('/login', async (req, res) => {
   }
 });
 
+
+/**
+ * @swagger
+ * /api/user/change-password:
+ *   put:
+ *     summary: Change user password
+ *     description: Change the authenticated user's password by providing the old and new password
+ *     tags:
+ *       - Authentication
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               oldPassword:
+ *                 type: string
+ *                 format: password
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *             required:
+ *               - oldPassword
+ *               - newPassword
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing parameters or invalid password
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+// PUT /api/user/change-password (auth required)
+router.put('/change-password', auth, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ message: 'oldPassword and newPassword required' });
+  try {
+    const result = await db.query('SELECT id, password_hash FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const match = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!match) return res.status(400).json({ message: 'Old password is incorrect' });
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
+    console.log('[USER] Password changed:', { userId: req.user.id });
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    console.error('[USER CHANGE PASSWORD ERROR]', { message: err.message, userId: req.user?.id });
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
+

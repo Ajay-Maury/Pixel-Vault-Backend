@@ -310,4 +310,163 @@ router.post('/search', async (req, res) => {
   }
 });
 
+
+/**
+ * Helper: extract Cloudinary public_id from a secure URL
+ */
+function extractPublicIdFromUrl(url) {
+  try {
+    // remove querystring
+    const clean = url.split('?')[0];
+    const parts = clean.split('/upload/');
+    if (parts.length < 2) return null;
+    let remainder = parts[1];
+    // strip version prefix if present v123456789/
+    remainder = remainder.replace(/^v\d+\//, '');
+    // remove file extension
+    remainder = remainder.replace(/\.[^/.]+$/, '');
+    return remainder;
+  } catch (err) {
+    return null;
+  }
+}
+
+
+/**
+ * @swagger
+ * /api/image/{id}:
+ *   delete:
+ *     summary: Delete an image
+ *     description: Delete an image (Cloudinary resource + DB record). Only owner may delete.
+ *     tags:
+ *       - Images
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: UUID of the image to delete
+ *     responses:
+ *       204:
+ *         description: Image deleted successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - not owner
+ *       404:
+ *         description: Image not found
+ *       500:
+ *         description: Server error
+ */
+// DELETE /api/image/:id (auth required)
+router.delete('/:id', auth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query('SELECT * FROM images WHERE id = $1', [id]);
+    const image = result.rows[0];
+    if (!image) return res.status(404).json({ message: 'Image not found' });
+    if (String(image.user_id) !== String(req.user.id)) return res.status(403).json({ message: 'Forbidden' });
+
+    // attempt to remove from Cloudinary if possible
+    try {
+      const publicId = extractPublicIdFromUrl(image.image_url);
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+        console.log('[IMAGE] Cloudinary resource destroyed', { publicId, userId: req.user.id });
+      } else {
+        console.warn('[IMAGE] Could not extract publicId for Cloudinary delete', { url: image.image_url });
+      }
+    } catch (err) {
+      console.error('[IMAGE] Cloudinary delete error', { message: err.message, imageId: id });
+      // continue to delete DB record even if Cloudinary delete fails
+    }
+
+    await db.query('DELETE FROM images WHERE id = $1', [id]);
+    console.log('[IMAGE] Image DB record deleted', { id, userId: req.user.id });
+    res.status(204).send();
+  } catch (err) {
+    console.error('[IMAGE DELETE ERROR]', { message: err.message, id });
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+/**
+ * @swagger
+ * /api/image/{id}:
+ *   put:
+ *     summary: Update image metadata
+ *     description: Update title, description, keywords, and privacy for an image. Only owner may update.
+ *     tags:
+ *       - Images
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: UUID of the image to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               keywords:
+ *                 type: string
+ *                 description: Comma-separated keywords
+ *               isPrivate:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Updated image
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 image:
+ *                   $ref: '#/components/schemas/Image'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - not owner
+ *       404:
+ *         description: Image not found
+ *       500:
+ *         description: Server error
+ */
+// PUT /api/image/:id (auth required)
+router.put('/:id', auth, async (req, res) => {
+  const { id } = req.params;
+  const { title, description, keywords, isPrivate } = req.body;
+  try {
+    const result = await db.query('SELECT * FROM images WHERE id = $1', [id]);
+    const image = result.rows[0];
+    if (!image) return res.status(404).json({ message: 'Image not found' });
+    if (String(image.user_id) !== String(req.user.id)) return res.status(403).json({ message: 'Forbidden' });
+
+    const keywordArray = keywords ? keywords.split(',').map(k => k.trim()).filter(Boolean) : image.keywords;
+    const update = await db.query(
+      `UPDATE images SET title = $1, description = $2, keywords = $3, is_private = $4 WHERE id = $5 RETURNING *`,
+      [title ?? image.title, description ?? image.description, keywordArray, isPrivate ?? image.is_private, id]
+    );
+    console.log('[IMAGE] Image metadata updated', { id, userId: req.user.id });
+    res.json({ image: update.rows[0] });
+  } catch (err) {
+    console.error('[IMAGE UPDATE ERROR]', { message: err.message, id, userId: req.user?.id });
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
