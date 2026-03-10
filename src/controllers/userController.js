@@ -58,6 +58,10 @@ const userController = {
   async login(req, res) {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
     try {
       const user = await userModel.findByEmail(email.toLowerCase());
 
@@ -141,9 +145,9 @@ const userController = {
         user: {
           id: user.id,
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          gender: user.gender,
+          firstName: user?.firstName,
+          lastName: user?.lastName,
+          gender: user?.gender,
           createdAt: user.created_at,
           totalImages: 0
         }
