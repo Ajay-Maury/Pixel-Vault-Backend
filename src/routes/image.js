@@ -3,6 +3,8 @@ import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import imageController from '../controllers/imageController.js';
 import auth from '../middleware/auth.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });

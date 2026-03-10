@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -7,10 +6,9 @@ import prisma from './prisma.js';
 import userRoutes from './routes/user.js';
 import imageRoutes from './routes/image.js';
 import { v2 as cloudinary } from 'cloudinary';
-
-
-
+import dotenv from 'dotenv';
 dotenv.config();
+
 
 const app = express();
 
@@ -124,7 +122,7 @@ const getHealthStatus = async () => {
 
   // Check database
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await prisma.$connect();
     health.database = 'UP';
   } catch (err) {
     console.warn('[HEALTH] Database check failed:', err.message);
@@ -228,7 +226,7 @@ const PORT = process.env.PORT;
 // Start server after confirming database connection
 const startServer = async () => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await prisma.$connect();
     const server = app.listen(PORT, () => {
       console.log(`[SUCCESS] Server running on port ${PORT}`);
       console.log(`[INFO] API documentation available at http://localhost:${PORT}/api-docs`);
