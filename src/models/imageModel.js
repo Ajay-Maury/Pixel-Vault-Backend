@@ -1,28 +1,31 @@
-const prisma = require('../prisma');
+import prisma from '../prisma.js';
 
-module.exports = {
+ const imageModel = {
   async createImage(data) {
-    return prisma.image.create({ data });
+    return prisma.images.create({ data });
   },
-  async findImagesForUser(userId, search, limit, offset) {
-    return prisma.image.findMany({
+  async findImagesForUser(userId, search, limit, offset, myLibrary = false) {
+    return prisma.images.findMany({
       where: {
-        OR: [
-          { isPrivate: false },
-          { userId }
-        ],
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } }
-        ]
+        ...(myLibrary
+          ? { user_id: userId }
+          : { is_private: false }),
+
+        ...(search && {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } }
+          ]
+        })
       },
-      orderBy: { uploadedAt: 'desc' },
+      orderBy: { uploaded_at: 'desc' },
       take: limit,
       skip: offset
     });
   },
+
   async countImagesForUser(userId, search) {
-    return prisma.image.count({
+    return prisma.images.count({
       where: {
         OR: [
           { isPrivate: false },
@@ -36,12 +39,14 @@ module.exports = {
     });
   },
   async findById(id) {
-    return prisma.image.findUnique({ where: { id } });
+    return prisma.images.findUnique({ where: { id } });
   },
   async updateImage(id, data) {
-    return prisma.image.update({ where: { id }, data });
+    return prisma.images.update({ where: { id }, data });
   },
   async deleteImage(id) {
-    return prisma.image.delete({ where: { id } });
+    return prisma.images.delete({ where: { id } });
   }
 };
+
+export default imageModel;

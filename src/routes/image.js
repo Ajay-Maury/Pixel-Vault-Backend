@@ -1,10 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const imageController = require('../controllers/imageController');
-const auth = require('../middleware/auth');
+import express from 'express';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import imageController from '../controllers/imageController.js';
+import auth from '../middleware/auth.js';
 
+const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Configure Cloudinary
@@ -249,29 +249,8 @@ router.post('/save', auth, imageController.saveImage);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-// POST /api/image/search  (auth optional — public images always visible, private only to owner)
-router.post('/search', imageController.searchImages);
-
-
-/**
- * Helper: extract Cloudinary public_id from a secure URL
- */
-function extractPublicIdFromUrl(url) {
-  try {
-    // remove querystring
-    const clean = url.split('?')[0];
-    const parts = clean.split('/upload/');
-    if (parts.length < 2) return null;
-    let remainder = parts[1];
-    // strip version prefix if present v123456789/
-    remainder = remainder.replace(/^v\d+\//, '');
-    // remove file extension
-    remainder = remainder.replace(/\.[^/.]+$/, '');
-    return remainder;
-  } catch (err) {
-    return null;
-  }
-}
+// POST /api/image/search  (auth required)
+router.post('/search', auth, imageController.searchImages);
 
 
 /**
@@ -362,4 +341,4 @@ router.delete('/:id', auth, imageController.deleteImage);
 // PUT /api/image/:id (auth required)
 router.put('/:id', auth, imageController.updateImage);
 
-module.exports = router;
+export default router;

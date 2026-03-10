@@ -1,9 +1,16 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./swagger');
-const prisma = require('./prisma');
+import dotenv from 'dotenv';
+import express from 'express';
+import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './swagger.js';
+import prisma from './prisma.js';
+import userRoutes from './routes/user.js';
+import imageRoutes from './routes/image.js';
+import { v2 as cloudinary } from 'cloudinary';
+
+
+
+dotenv.config();
 
 const app = express();
 
@@ -125,7 +132,6 @@ const getHealthStatus = async () => {
 
   // Check Cloudinary
   try {
-    const cloudinary = require('cloudinary').v2;
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
@@ -214,8 +220,8 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
-app.use('/api/user', require('./routes/user'));
-app.use('/api/image', require('./routes/image'));
+app.use('/api/user', userRoutes);
+app.use('/api/image', imageRoutes);
 
 const PORT = process.env.PORT;
 

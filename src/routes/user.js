@@ -1,9 +1,8 @@
-const express = require('express');
+import express from 'express';
+import userController from '../controllers/userController.js';
+import auth from '../middleware/auth.js';
+
 const router = express.Router();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const userController = require('../controllers/userController');
-const auth = require('../middleware/auth');
 
 /**
  * @swagger
@@ -201,5 +200,5 @@ router.post('/login', userController.login);
 // PUT /api/user/change-password (auth required)
 router.put('/change-password', auth, userController.changePassword);
 
-module.exports = router;
+export default router;
 

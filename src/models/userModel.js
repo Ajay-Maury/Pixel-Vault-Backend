@@ -1,16 +1,24 @@
-const prisma = require('../prisma');
+import prisma from '../prisma.js';
 
-module.exports = {
+const userModel = {
   async findByEmail(email) {
-    return prisma.user.findUnique({ where: { email } });
+    return prisma.users.findUnique({ where: { email } });
   },
+
   async createUser(data) {
-    return prisma.user.create({ data });
+    return prisma.users.create({ data });
   },
+
   async findById(id) {
-    return prisma.user.findUnique({ where: { id } });
+    return prisma.users.findUnique({ where: { id } });
   },
-  async updatePassword(id, password) {
-    return prisma.user.update({ where: { id }, data: { password } });
+
+  async updatePassword(id, password_hash) {
+    return prisma.users.update({
+      where: { id },
+      data: { password_hash }
+    });
   }
 };
+
+export default userModel;
