@@ -153,6 +153,119 @@ router.post('/register', userController.register);
 // POST /api/user/login
 router.post('/login', userController.login);
 
+/**
+ * @swagger
+ * /api/user/profile:
+ *   get:
+ *     summary: Get authenticated user profile
+ *     description: Returns the authenticated user's profile details along with the total number of images uploaded by that user.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     email:
+ *                       type: string
+ *                       format: email
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                       nullable: true
+ *                     gender:
+ *                       type: string
+ *                       enum: [MALE, FEMALE, OTHER]
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     totalImages:
+ *                       type: integer
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.get('/profile', auth, userController.getProfile);
+
+/**
+ * @swagger
+ * /api/user/profile:
+ *   put:
+ *     summary: Update authenticated user profile
+ *     description: Updates first name, last name, and gender for the authenticated user.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *                 nullable: true
+ *               gender:
+ *                 type: string
+ *                 enum: [MALE, FEMALE, OTHER]
+ *             required:
+ *               - firstName
+ *               - gender
+ *     responses:
+ *       200:
+ *         description: User profile updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     email:
+ *                       type: string
+ *                       format: email
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                       nullable: true
+ *                     gender:
+ *                       type: string
+ *                       enum: [MALE, FEMALE, OTHER]
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Missing required fields or invalid gender
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.put('/profile', auth, userController.updateProfile);
 
 /**
  * @swagger
@@ -201,4 +314,3 @@ router.post('/login', userController.login);
 router.put('/change-password', auth, userController.changePassword);
 
 export default router;
-

@@ -2,12 +2,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import userModel from '../models/userModel.js';
 
+const validGenders = ['MALE', 'FEMALE', 'OTHER'];
+
 const userController = {
 
   async register(req, res) {
     const { email, password, firstName, lastName = '', gender } = req.body;
-
-    const validGenders = ['MALE', 'FEMALE', 'OTHER'];
 
     if (gender && !validGenders.includes(gender)) {
       return res.status(400).json({
@@ -135,7 +135,7 @@ const userController = {
 
   async getProfile(req, res) {
     try {
-      const user = await userModel.findById(req.user.id);
+      const user = await userModel.findProfileById(req.user.id);
 
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
@@ -149,10 +149,47 @@ const userController = {
           lastName: user?.lastName,
           gender: user?.gender,
           createdAt: user.created_at,
-          totalImages: 0
+          totalImages: user._count.images
         }
       });
 
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+
+  async updateProfile(req, res) {
+    const { firstName, lastName, gender } = req.body;
+
+    if (!firstName || !gender) {
+      return res.status(400).json({
+        message: 'firstName and gender are required'
+      });
+    }
+
+    if (!validGenders.includes(gender)) {
+      return res.status(400).json({
+        message: 'Invalid gender. Must be MALE, FEMALE, or OTHER.'
+      });
+    }
+
+    try {
+      const updatedUser = await userModel.updateProfile(req.user.id, {
+        firstName,
+        lastName: lastName || null,
+        gender
+      });
+
+      res.json({
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          gender: updatedUser.gender,
+          createdAt: updatedUser.created_at
+        }
+      });
     } catch (err) {
       res.status(500).json({ message: err.message });
     }
