@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model images {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String?   @db.Uuid
+  title       String
+  description String?
+  image_url   String
+  keywords    String[]
+  width       Int?
+  height      Int?
+  size        Int?
+  is_private  Boolean?  @default(true)
+  uploaded_at DateTime? @default(now()) @db.Timestamp(6)
+  users       users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model users {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String    @unique
+  password_hash String
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  images        images[]
+}

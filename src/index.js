@@ -1,9 +1,15 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./swagger');
-const db = require('./db');
+import express from 'express';
+import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './swagger.js';
+import prisma from './prisma.js';
+import userRoutes from './routes/user.js';
+import imageRoutes from './routes/image.js';
+import { v2 as cloudinary } from 'cloudinary';
+import dotenv from 'dotenv';
+dotenv.config();
+
+
 const app = express();
 
 // Validate required environment variables with detailed error messages
@@ -116,7 +122,7 @@ const getHealthStatus = async () => {
 
   // Check database
   try {
-    await db.testConnection();
+    await prisma.$connect();
     health.database = 'UP';
   } catch (err) {
     console.warn('[HEALTH] Database check failed:', err.message);
@@ -124,7 +130,6 @@ const getHealthStatus = async () => {
 
   // Check Cloudinary
   try {
-    const cloudinary = require('cloudinary').v2;
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
@@ -213,16 +218,15 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
-app.use('/api/user', require('./routes/user'));
-app.use('/api/image', require('./routes/image'));
+app.use('/api/user', userRoutes);
+app.use('/api/image', imageRoutes);
 
 const PORT = process.env.PORT;
 
 // Start server after confirming database connection
 const startServer = async () => {
   try {
-    await db.testConnection();
-    
+    await prisma.$connect();
     const server = app.listen(PORT, () => {
       console.log(`[SUCCESS] Server running on port ${PORT}`);
       console.log(`[INFO] API documentation available at http://localhost:${PORT}/api-docs`);
@@ -231,7 +235,8 @@ const startServer = async () => {
     // Handle graceful shutdown
     process.on('SIGTERM', () => {
       console.log('[INFO] SIGTERM received, shutting down gracefully...');
-      server.close(() => {
+      server.close(async () => {
+        await prisma.$disconnect();
         console.log('[INFO] Server closed');
         process.exit(0);
       });
@@ -239,7 +244,8 @@ const startServer = async () => {
 
     process.on('SIGINT', () => {
       console.log('[INFO] SIGINT received, shutting down gracefully...');
-      server.close(() => {
+      server.close(async () => {
+        await prisma.$disconnect();
         console.log('[INFO] Server closed');
         process.exit(0);
       });

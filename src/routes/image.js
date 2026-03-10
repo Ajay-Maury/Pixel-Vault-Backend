@@ -1,10 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const db = require('../db');
-const auth = require('../middleware/auth');
+import express from 'express';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import imageController from '../controllers/imageController.js';
+import auth from '../middleware/auth.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
+const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Configure Cloudinary
@@ -191,26 +193,7 @@ router.post('/minio-upload', auth, upload.single('image'), async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/image/save  (auth required)
-router.post('/save', auth, async (req, res) => {
-  const { title, description, keywords, height, width, imageUrl, size, isPrivate } = req.body;
-  try {
-    const keywordArray = keywords ? keywords.split(',').map(k => k.trim()).filter(Boolean) : [];
-    const result = await db.query(
-      `INSERT INTO images (user_id, title, description, image_url, keywords, height, width, size, is_private)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [req.user.id, title, description, imageUrl, keywordArray, height, width, size, isPrivate ?? true]
-    );
-    console.log('[IMAGE] Image saved:', { id: result.rows[0].id, userId: req.user.id, title });
-    res.status(201).json({ image: result.rows[0] });
-  } catch (err) {
-    console.error('[IMAGE SAVE ERROR]', {
-      message: err.message,
-      userId: req.user?.id,
-      title
-    });
-    res.status(500).json({ message: err.message });
-  }
-});
+router.post('/save', auth, imageController.saveImage);
 
 /**
  * @swagger
@@ -268,68 +251,8 @@ router.post('/save', auth, async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-// POST /api/image/search  (auth optional — public images always visible, private only to owner)
-router.post('/search', async (req, res) => {
-  const { searchText = '', limit = 12, offset = 0 } = req.body;
-  const authHeader = req.headers.authorization;
-  let userId = null;
-  try {
-    if (authHeader?.startsWith('Bearer ')) {
-      const jwt = require('jsonwebtoken');
-      const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
-      userId = decoded.id;
-    }
-  } catch (err) {
-    console.warn('[IMAGE SEARCH] Token verification failed:', err.message);
-  }
-
-  try {
-    const search = `%${searchText}%`;
-    const result = await db.query(
-      `SELECT *, id::text AS _id FROM images
-       WHERE (is_private = false OR user_id = $1)
-       AND (title ILIKE $2 OR description ILIKE $2 OR $2 = '%%')
-       ORDER BY uploaded_at DESC
-       LIMIT $3 OFFSET $4`,
-      [userId, search, limit, offset]
-    );
-    const countResult = await db.query(
-      `SELECT COUNT(*) FROM images
-       WHERE (is_private = false OR user_id = $1)
-       AND (title ILIKE $2 OR description ILIKE $2 OR $2 = '%%')`,
-      [userId, search]
-    );
-    console.log('[IMAGE] Search performed:', { query: searchText, results: result.rows.length, userId });
-    res.json({ data: result.rows, totalCount: parseInt(countResult.rows[0].count) });
-  } catch (err) {
-    console.error('[IMAGE SEARCH ERROR]', {
-      message: err.message,
-      query: searchText
-    });
-    res.status(500).json({ message: err.message });
-  }
-});
-
-
-/**
- * Helper: extract Cloudinary public_id from a secure URL
- */
-function extractPublicIdFromUrl(url) {
-  try {
-    // remove querystring
-    const clean = url.split('?')[0];
-    const parts = clean.split('/upload/');
-    if (parts.length < 2) return null;
-    let remainder = parts[1];
-    // strip version prefix if present v123456789/
-    remainder = remainder.replace(/^v\d+\//, '');
-    // remove file extension
-    remainder = remainder.replace(/\.[^/.]+$/, '');
-    return remainder;
-  } catch (err) {
-    return null;
-  }
-}
+// POST /api/image/search  (auth required)
+router.post('/search', auth, imageController.searchImages);
 
 
 /**
@@ -362,36 +285,7 @@ function extractPublicIdFromUrl(url) {
  *         description: Server error
  */
 // DELETE /api/image/:id (auth required)
-router.delete('/:id', auth, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await db.query('SELECT * FROM images WHERE id = $1', [id]);
-    const image = result.rows[0];
-    if (!image) return res.status(404).json({ message: 'Image not found' });
-    if (String(image.user_id) !== String(req.user.id)) return res.status(403).json({ message: 'Forbidden' });
-
-    // attempt to remove from Cloudinary if possible
-    try {
-      const publicId = extractPublicIdFromUrl(image.image_url);
-      if (publicId) {
-        await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
-        console.log('[IMAGE] Cloudinary resource destroyed', { publicId, userId: req.user.id });
-      } else {
-        console.warn('[IMAGE] Could not extract publicId for Cloudinary delete', { url: image.image_url });
-      }
-    } catch (err) {
-      console.error('[IMAGE] Cloudinary delete error', { message: err.message, imageId: id });
-      // continue to delete DB record even if Cloudinary delete fails
-    }
-
-    await db.query('DELETE FROM images WHERE id = $1', [id]);
-    console.log('[IMAGE] Image DB record deleted', { id, userId: req.user.id });
-    res.status(204).send();
-  } catch (err) {
-    console.error('[IMAGE DELETE ERROR]', { message: err.message, id });
-    res.status(500).json({ message: err.message });
-  }
-});
+router.delete('/:id', auth, imageController.deleteImage);
 
 
 /**
@@ -447,26 +341,6 @@ router.delete('/:id', auth, async (req, res) => {
  *         description: Server error
  */
 // PUT /api/image/:id (auth required)
-router.put('/:id', auth, async (req, res) => {
-  const { id } = req.params;
-  const { title, description, keywords, isPrivate } = req.body;
-  try {
-    const result = await db.query('SELECT * FROM images WHERE id = $1', [id]);
-    const image = result.rows[0];
-    if (!image) return res.status(404).json({ message: 'Image not found' });
-    if (String(image.user_id) !== String(req.user.id)) return res.status(403).json({ message: 'Forbidden' });
+router.put('/:id', auth, imageController.updateImage);
 
-    const keywordArray = keywords ? keywords.split(',').map(k => k.trim()).filter(Boolean) : image.keywords;
-    const update = await db.query(
-      `UPDATE images SET title = $1, description = $2, keywords = $3, is_private = $4 WHERE id = $5 RETURNING *`,
-      [title ?? image.title, description ?? image.description, keywordArray, isPrivate ?? image.is_private, id]
-    );
-    console.log('[IMAGE] Image metadata updated', { id, userId: req.user.id });
-    res.json({ image: update.rows[0] });
-  } catch (err) {
-    console.error('[IMAGE UPDATE ERROR]', { message: err.message, id, userId: req.user?.id });
-    res.status(500).json({ message: err.message });
-  }
-});
-
-module.exports = router;
+export default router;
