@@ -1,16 +1,10 @@
 services:
   - type: web
     name: pixel-vault-backend
-    runtime: node
+    runtime: docker
     plan: free
-
-    buildCommand: |
-      npm install
-      npx prisma generate
-
-    startCommand: |
-      npx prisma migrate deploy
-      npm start
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
 
     envVars:
       - key: PORT
