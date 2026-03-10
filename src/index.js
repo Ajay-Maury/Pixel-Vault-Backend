@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./swagger');
-const db = require('./db');
+const prisma = require('./prisma');
+
 const app = express();
 
 // Validate required environment variables with detailed error messages
@@ -116,7 +117,7 @@ const getHealthStatus = async () => {
 
   // Check database
   try {
-    await db.testConnection();
+    await prisma.$queryRaw`SELECT 1`;
     health.database = 'UP';
   } catch (err) {
     console.warn('[HEALTH] Database check failed:', err.message);
@@ -221,8 +222,7 @@ const PORT = process.env.PORT;
 // Start server after confirming database connection
 const startServer = async () => {
   try {
-    await db.testConnection();
-    
+    await prisma.$queryRaw`SELECT 1`;
     const server = app.listen(PORT, () => {
       console.log(`[SUCCESS] Server running on port ${PORT}`);
       console.log(`[INFO] API documentation available at http://localhost:${PORT}/api-docs`);
@@ -231,7 +231,8 @@ const startServer = async () => {
     // Handle graceful shutdown
     process.on('SIGTERM', () => {
       console.log('[INFO] SIGTERM received, shutting down gracefully...');
-      server.close(() => {
+      server.close(async () => {
+        await prisma.$disconnect();
         console.log('[INFO] Server closed');
         process.exit(0);
       });
@@ -239,7 +240,8 @@ const startServer = async () => {
 
     process.on('SIGINT', () => {
       console.log('[INFO] SIGINT received, shutting down gracefully...');
-      server.close(() => {
+      server.close(async () => {
+        await prisma.$disconnect();
         console.log('[INFO] Server closed');
         process.exit(0);
       });

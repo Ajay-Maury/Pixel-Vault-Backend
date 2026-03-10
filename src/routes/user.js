@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('../db');
+const userController = require('../controllers/userController');
 const auth = require('../middleware/auth');
 
 /**
@@ -20,6 +20,16 @@ const auth = require('../middleware/auth');
  *           schema:
  *             type: object
  *             properties:
+ *               firstName:
+ *                 type: string
+ *                 description: User's first name
+ *               lastName:
+ *                 type: string
+ *                 description: User's last name (optional)
+ *               gender:
+ *                 type: string
+ *                 enum: [MALE, FEMALE, OTHER]
+ *                 description: User's gender (MALE, FEMALE, OTHER)
  *               email:
  *                 type: string
  *                 format: email
@@ -29,6 +39,8 @@ const auth = require('../middleware/auth');
  *                 format: password
  *                 description: User's password (should be strong)
  *             required:
+ *               - firstName
+ *               - gender
  *               - email
  *               - password
  *     responses:
@@ -40,9 +52,26 @@ const auth = require('../middleware/auth');
  *               type: object
  *               properties:
  *                 user:
- *                   $ref: '#/components/schemas/User'
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     email:
+ *                       type: string
+ *                       format: email
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     gender:
+ *                       type: string
+ *                       enum: [MALE, FEMALE, OTHER]
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
  *       400:
- *         description: Missing email or password
+ *         description: Missing required parameters or invalid input
  *         content:
  *           application/json:
  *             schema:
@@ -61,28 +90,7 @@ const auth = require('../middleware/auth');
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/user/register
-router.post('/register', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
-  try {
-    const existing = await db.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (existing.rows.length) return res.status(409).json({ message: 'Email already registered' });
-    const password_hash = await bcrypt.hash(password, 10);
-    const result = await db.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
-      [email.toLowerCase(), password_hash]
-    );
-    console.log('[USER] User registered:', { id: result.rows[0].id, email: result.rows[0].email });
-    res.status(201).json({ user: result.rows[0] });
-  } catch (err) {
-    console.error('[USER REGISTER ERROR]', {
-      message: err.message,
-      stack: err.stack,
-      email: email
-    });
-    res.status(500).json({ message: err.message });
-  }
-});
+router.post('/register', userController.register);
 
 /**
  * @swagger
@@ -144,33 +152,7 @@ router.post('/register', async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/user/login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    const user = result.rows[0];
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      console.warn('[USER LOGIN] Failed login attempt:', { email });
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    if (!process.env.JWT_SECRET) {
-      console.error('[USER LOGIN] JWT_SECRET not set');
-      return res.status(500).json({ message: 'Server configuration error' });
-    }
-    
-    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    console.log('[USER] User logged in:', { id: user.id, email: user.email });
-    res.json({ token, user: { id: user.id, email: user.email } });
-  } catch (err) {
-    console.error('[USER LOGIN ERROR]', {
-      message: err.message,
-      stack: err.stack,
-      email: email
-    });
-    res.status(500).json({ message: err.message });
-  }
-});
+router.post('/login', userController.login);
 
 
 /**
@@ -217,24 +199,7 @@ router.post('/login', async (req, res) => {
  *         description: Server error
  */
 // PUT /api/user/change-password (auth required)
-router.put('/change-password', auth, async (req, res) => {
-  const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) return res.status(400).json({ message: 'oldPassword and newPassword required' });
-  try {
-    const result = await db.query('SELECT id, password_hash FROM users WHERE id = $1', [req.user.id]);
-    const user = result.rows[0];
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    const match = await bcrypt.compare(oldPassword, user.password_hash);
-    if (!match) return res.status(400).json({ message: 'Old password is incorrect' });
-    const newHash = await bcrypt.hash(newPassword, 10);
-    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
-    console.log('[USER] Password changed:', { userId: req.user.id });
-    res.json({ message: 'Password changed successfully' });
-  } catch (err) {
-    console.error('[USER CHANGE PASSWORD ERROR]', { message: err.message, userId: req.user?.id });
-    res.status(500).json({ message: err.message });
-  }
-});
+router.put('/change-password', auth, userController.changePassword);
 
 module.exports = router;
 
