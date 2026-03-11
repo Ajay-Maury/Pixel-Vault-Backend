@@ -149,7 +149,7 @@ const userController = {
         lastName: user?.lastName,
         gender: user?.gender,
         createdAt: user.created_at,
-        totalImages: user._count.images
+        uploadCount: user._count.images
       }
     });
   },
