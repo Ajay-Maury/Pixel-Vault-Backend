@@ -1,334 +1,302 @@
 # Pixel Vault Backend
 
-A Node.js + Express + PostgreSQL + Cloudinary backend for the Pixel Vault image management application.
+Express and Prisma backend for Pixel Vault. It handles user authentication, profile management, image metadata, Cloudinary uploads, Swagger docs, and PostgreSQL persistence.
+
+## Stack
+
+- Node.js 20
+- Express 4
+- Prisma 7 with PostgreSQL
+- Cloudinary for file storage
+- JWT authentication
+- Swagger UI at `/api-docs`
+- Docker and Render deployment support
 
 ## Features
 
-- ✅ User authentication with JWT
-- ✅ Image upload to Cloudinary
-- ✅ Image metadata storage in PostgreSQL
-- ✅ Image search with filtering
-- ✅ Public/private image access control
-- ✅ Docker & Docker Compose ready
-- ✅ Render deployment ready
-
-## Tech Stack
-
-- **Runtime**: Node.js 20-alpine
-- **Framework**: Express.js
-- **Database**: PostgreSQL 17
-- **Storage**: Cloudinary
-- **Auth**: JWT (7-day expiry) with bcryptjs (10 rounds)
-- **File Upload**: Multer
-- **Containerization**: Docker & Docker Compose
-- **Deployment**: Render (primary)
+- Email/password registration and login
+- JWT-protected routes
+- User profile fetch and update
+- Password change endpoint
+- Cloudinary upload flow for image files
+- Image metadata save, update, delete, and search
+- Health checks for app, database, and Cloudinary
 
 ## Project Structure
 
-```
+```text
 src/
-├── routes/
-│   ├── user.js       (Register, Login)
-│   └── image.js      (Upload, Save, Search)
-├── middleware/
-│   └── auth.js       (JWT verification)
-├── db/
-│   ├── index.js      (PostgreSQL pool)
-│   └── schema.sql    (Database schema)
-└── index.js          (Express app entry)
+  controllers/   Request handlers
+  middleware/    Auth middleware
+  models/        Prisma-backed data access
+  routes/        Express route definitions
+  utils/         Errors, logging, async helpers
+  index.js       App bootstrap
+  prisma.js      Prisma client setup
+  swagger.js     OpenAPI configuration
 
-Dockerfile           (Container image definition)
-docker-compose.yml   (Local dev environment)
-render.yaml          (Render deployment config)
+prisma/
+  schema.prisma
+  migrations/
+
+Dockerfile
+docker-compose.yml
+render.yaml
 ```
 
-## Quick Start (Local Development)
+## Environment Variables
 
-### Prerequisites
-- Docker & Docker Compose (for local PostgreSQL)
-- npm
-- Cloudinary account (free at https://cloudinary.com)
+Copy [.env.example](/Users/ajay/personal/Pixel-Vault-Backend/.env.example) to `.env` and set all required values.
 
-### 1. Clone & Install
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | Yes | API port. Default local setup uses `5000`. |
+| `NODE_ENV` | Yes | `development` or `production`. |
+| `POSTGRES_USER` | Docker only | Local Postgres username for Compose. |
+| `POSTGRES_PASSWORD` | Docker only | Local Postgres password for Compose. |
+| `POSTGRES_DB` | Docker only | Local Postgres database name for Compose. |
+| `POSTGRES_PORT` | Docker only | Host port mapped to Postgres. |
+| `DATABASE_URL` | Yes | PostgreSQL connection string used by Prisma. |
+| `JWT_SECRET` | Yes | Secret used to sign JWTs. |
+| `CLOUDINARY_CLOUD_NAME` | Yes | Cloudinary cloud name. |
+| `CLOUDINARY_API_KEY` | Yes | Cloudinary API key. |
+| `CLOUDINARY_API_SECRET` | Yes | Cloudinary API secret. |
+
+The app validates these at startup and exits with a clear error if any required value is missing.
+
+## Local Development
+
+### Option 1: Docker Compose
+
+1. Install dependencies:
+
 ```bash
-git clone <repo>
-cd Pixel-Vault-Backend
 npm install
 ```
 
-### 2. Configure Environment
+2. Create `.env`:
+
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your database password and Cloudinary credentials:
-- `POSTGRES_PASSWORD`: Any password for local PostgreSQL
-- `CLOUDINARY_CLOUD_NAME`: From Cloudinary dashboard
-- `CLOUDINARY_API_KEY`: From Cloudinary dashboard
-- `CLOUDINARY_API_SECRET`: From Cloudinary account settings
+3. Start the stack:
 
-### 3. Run with Docker Compose
 ```bash
-docker-compose up
+docker-compose up --build
 ```
 
 This starts:
-- PostgreSQL on `localhost:5432`
-- Node app on `localhost:5000`
 
-### 4. Test the API
-```bash
-curl http://localhost:5000/health
-```
+- PostgreSQL on `localhost:${POSTGRES_PORT}`
+- API on `http://localhost:5000`
 
-## Manual Setup (Without Docker)
+The app container runs `prisma migrate deploy` before starting the server.
 
-### 1. PostgreSQL Setup
-```bash
-# Install PostgreSQL 15
-# Create database
-createuser pixelvault
-createdb -O pixelvault pixelvault
+### Option 2: Run app locally
 
-# Run schema
-psql -U pixelvault -d pixelvault -f src/db/schema.sql
-```
+1. Start a PostgreSQL instance and create a database.
+2. Set `DATABASE_URL` in `.env`.
+3. Install dependencies:
 
-### 2. Cloudinary Setup
-```bash
-# Sign up at https://cloudinary.com (free account)
-# Get your credentials from: https://cloudinary.com/console/settings/account
-# You'll need:
-# - Cloud Name
-# - API Key
-# - API Secret
-```
-
-### 3. Environment Variables
-Update `.env`:
-```
-PORT=5000
-DATABASE_URL=postgresql://pixelvault:password@localhost:5432/pixelvault
-JWT_SECRET=your-secret-key-32-chars-minimum
-NODE_ENV=development
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-```
-
-### 4. Start Development Server
 ```bash
 npm install
+```
+
+4. Apply migrations:
+
+```bash
+npx prisma migrate deploy
+```
+
+5. Start the API:
+
+```bash
 npm run dev
 ```
 
-## API Routes
+## Frontend
 
-### Authentication
-- `POST /api/user/register` - Register new user
-  ```json
-  {
-    "email": "user@example.com",
-    "password": "secure_password"
-  }
-  ```
+The frontend application that integrates with this backend service can be found in the [frontend repository](https://github.com/Ajay-Maury/Pixel-Vault.git)
 
-- `POST /api/user/login` - Login user
-  ```json
-  {
-    "email": "user@example.com",
-    "password": "secure_password"
-  }
-  ```
-  Returns: `{ token, user: { id, email } }`
-
-### Image Management (Auth Required)
-- `POST /api/image/minio-upload` - Upload file to Cloudinary
-  - Form data: `image` (file)
-  - Returns: `{ secure_url, width, height }`
-
-- `POST /api/image/save` - Save image metadata
-  ```json
-  {
-    "title": "My Image",
-    "description": "Image description",
-    "imageUrl": "https://minio.../image.jpg",
-    "keywords": "tag1, tag2",
-    "width": 1920,
-    "height": 1080,
-    "size": 2048000,
-    "isPrivate": false
-  }
-  ```
-
-### Search (Auth Optional)
-- `POST /api/image/search` - Search images
-  ```json
-  {
-    "searchText": "nature",
-    "limit": 12,
-    "offset": 0
-  }
-  ```
-  - Public images always visible
-  - Private images only visible to owner
-
-### Health Check
-- `GET /health` - Server status
-
-## Deployment on Render
-
-### Step 1: Create Render Account
-- Sign up at https://render.com
-
-### Step 2: Create New Service
-- Dashboard → New → Web Service
-- Connect your GitHub repository
-- Select `main` branch
-
-### Step 3: Configure Service
-- **Name**: pixel-vault-backend
-- **Environment**: Node
-- **Build Command**: `npm install`
-- **Start Command**: `npm start`
-
-### Step 4: Add PostgreSQL Database
-- Dashboard → New → PostgreSQL
-- Copy the `Database URL`
-
-### Step 5: Set Environment Variables
-In Render Dashboard → Environment:
-```
-PORT=5000
-NODE_ENV=production
-DATABASE_URL=[from PostgreSQL service]
-JWT_SECRET=[generate strong secret]
-CLOUDINARY_CLOUD_NAME=[from Cloudinary]
-CLOUDINARY_API_KEY=[from Cloudinary]
-CLOUDINARY_API_SECRET=[from Cloudinary]
-```
-
-### Step 6: Deploy
-- Click "Create Web Service"
-- Render automatically deploys on GitHub push
-
-See [render.yaml](./render.yaml) for infrastructure as code configuration.
-
-## Environment Variables
-
-**All variables are strictly required. No defaults.**
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `PORT` | Server port | `5000` |
-| `NODE_ENV` | Environment | `production` or `development` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
-| `JWT_SECRET` | JWT signing secret (32+ chars) | Generated with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | From https://cloudinary.com/console |
-| `CLOUDINARY_API_KEY` | Cloudinary API key | From Cloudinary dashboard |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret | From Cloudinary account settings |
-
-## Development Commands
+## Useful Commands
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server with auto-reload
 npm run dev
-
-# Start production server
 npm start
-
-# Run with Docker Compose
-docker-compose up
-
-# Run with Docker Compose (detached)
-docker-compose up -d
-
-# Stop Docker Compose
+npx prisma migrate deploy
+docker-compose up --build
 docker-compose down
-
-# Reset Docker volumes (delete data)
-docker-compose down -v
 ```
 
-## Database Schema
+## API Base URL
 
-### Users Table
-```sql
-id (UUID) - Primary key
-email (TEXT) - Unique email
-password_hash (TEXT) - Bcrypt hash
-created_at (TIMESTAMP) - Creation timestamp
+Local default base URL:
+
+```text
+http://localhost:5000
 ```
 
-### Images Table
-```sql
-id (UUID) - Primary key
-user_id (UUID) - Foreign key to users
-title (TEXT) - Image title
-description (TEXT) - Image description
-image_url (TEXT) - Cloudinary URL
-keywords (TEXT[]) - Array of keywords
-width (INT) - Image width in pixels
-height (INT) - Image height in pixels
-size (INT) - File size in bytes
-is_private (BOOLEAN) - Private/public flag
-uploaded_at (TIMESTAMP) - Upload timestamp
+Interactive API docs:
+
+```text
+http://localhost:5000/api-docs
 ```
 
-## Error Handling
+## Endpoints
 
-The API returns standard HTTP status codes with JSON responses:
+### Health
+
+- `GET /health`
+  Lightweight container health check.
+- `GET /api/health`
+  Detailed health status for service, database, and Cloudinary.
+
+### Auth and Profile
+
+- `POST /api/user/register`
+
 ```json
 {
-  "message": "Error description"
+  "firstName": "Ajay",
+  "lastName": "Kumar",
+  "gender": "MALE",
+  "email": "ajay@example.com",
+  "password": "strong-password"
 }
 ```
 
-Common error codes:
-- `400` - Bad Request (missing fields)
-- `401` - Unauthorized (invalid token)
-- `409` - Conflict (email already exists)
-- `500` - Server Error
+- `POST /api/user/login`
 
-## Security Considerations
-
-- Passwords are hashed with bcryptjs (10 rounds)
-- JWT tokens expire after 7 days
-- Private images are only accessible to their owner
-- Cloudinary credentials are kept secure (never expose API secret in frontend)
-- Use HTTPS in production (Render enforces this)
-- Change `JWT_SECRET` in production to a strong random value
-- Keep `.env` file secure and in `.gitignore`
-
-## Troubleshooting
-
-### PostgreSQL connection error
-```
-Check DATABASE_URL format
-psql postgresql://user:pass@host:5432/db
+```json
+{
+  "email": "ajay@example.com",
+  "password": "strong-password"
+}
 ```
 
-### Cloudinary upload error
-```
-Verify CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
-Check Cloudinary account settings for correct credentials
-Ensure API key is active in Cloudinary dashboard
+Response includes a JWT token and basic user info.
+
+- `GET /api/user/profile`
+  Requires `Authorization: Bearer <token>`.
+
+- `PUT /api/user/profile`
+
+```json
+{
+  "firstName": "Ajay",
+  "lastName": "Kumar",
+  "gender": "MALE"
+}
 ```
 
-### JWT token invalid
-```
-Verify JWT_SECRET matches between login and other requests
-Check token format: "Bearer <token>"
-Token may have expired (7 day expiry)
+- `PUT /api/user/change-password`
+
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "new-password"
+}
 ```
 
-## License
+### Images
 
-MIT
+All image routes require `Authorization: Bearer <token>`.
+
+- `POST /api/image/minio-upload`
+  `multipart/form-data` with file field `image`.
+
+Response:
+
+```json
+{
+  "secure_url": "https://res.cloudinary.com/...",
+  "width": 1200,
+  "height": 800
+}
+```
+
+- `POST /api/image/save`
+
+```json
+{
+  "title": "Sunset",
+  "description": "Beach sunset",
+  "imageUrl": "https://res.cloudinary.com/...",
+  "keywords": "sunset, beach, orange",
+  "width": 1200,
+  "height": 800,
+  "size": 245000,
+  "isPrivate": true
+}
+```
+
+- `POST /api/image/search`
+
+```json
+{
+  "searchText": "sunset",
+  "limit": 12,
+  "offset": 0,
+  "myLibrary": false
+}
+```
+
+`myLibrary: true` restricts results to the authenticated user's uploads. Otherwise the route returns public images.
+
+- `PUT /api/image/:id`
+
+```json
+{
+  "title": "Updated title",
+  "description": "Updated description",
+  "keywords": "tag1, tag2",
+  "isPrivate": false
+}
+```
+
+- `DELETE /api/image/:id`
+
+Deletes the database record and attempts to remove the Cloudinary asset.
+
+## Database
+
+Prisma schema lives in [prisma/schema.prisma](./prisma/schema.prisma).
+
+Current models:
+
+- `users`
+  - `id`, `email`, `password_hash`
+  - `firstName`, `lastName`, `gender`
+  - `created_at`
+- `images`
+  - `id`, `user_id`, `title`, `description`
+  - `image_url`, `keywords`
+  - `width`, `height`, `size`
+  - `is_private`, `uploaded_at`
+
+## Deployment
+
+### Docker
+
+[Dockerfile](./Dockerfile) builds a production image, generates the Prisma client, runs migrations, and starts the server on port `5000`.
+
+### Render
+
+[render.yaml](./render.yaml) defines:
+
+- One web service using the Docker runtime
+- One PostgreSQL database
+- Required environment variables for production
+
+## Notes
+
+- Uploads are stored in Cloudinary under `pixelvault/<userId>`.
+- Startup fails fast if required environment variables are missing.
+- Request and error logging is enabled through the shared logger.
+
 
 ## Support
 
 For issues and questions, create an issue in the repository.
+
