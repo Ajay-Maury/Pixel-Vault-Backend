@@ -4,6 +4,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import imageController from '../controllers/imageController.js';
 import auth from '../middleware/auth.js';
 import dotenv from 'dotenv';
+import asyncHandler from '../utils/asyncHandler.js';
+import { badRequest, internalError } from '../utils/httpError.js';
+import logger from '../utils/logger.js';
 dotenv.config();
 
 const router = express.Router();
@@ -18,7 +21,7 @@ cloudinary.config({
 
 // Validate Cloudinary configuration
 if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.warn('[IMAGE] Cloudinary configuration incomplete - uploads may fail');
+  logger.warn('Cloudinary configuration incomplete - uploads may fail');
 }
 
 /**
@@ -82,47 +85,56 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/image/minio-upload  (auth required)
-router.post('/minio-upload', auth, upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-    
-    // Upload to Cloudinary using buffer
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: `pixelvault/${req.user.id}`,
-        resource_type: 'auto',
-      },
-      async (error, result) => {
-        if (error) {
-          console.error('[IMAGE UPLOAD ERROR]', {
-            message: error.message,
-            userId: req.user?.id,
-            fileName: req.file?.originalname
-          });
-          return res.status(500).json({ message: error.message });
-        }
-
-        console.log('[IMAGE] File uploaded:', { fileName: req.file.originalname, userId: req.user.id, size: req.file.size });
-        res.json({ 
-          secure_url: result.secure_url, 
-          width: result.width, 
-          height: result.height 
-        });
-      }
-    );
-
-    uploadStream.end(req.file.buffer);
-  } catch (err) {
-    console.error('[IMAGE UPLOAD ERROR]', {
-      message: err.message,
-      userId: req.user?.id,
-      fileName: req.file?.originalname
-    });
-    res.status(500).json({ message: err.message });
+router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw badRequest('No file uploaded');
   }
-});
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `pixelvault/${req.user.id}`,
+          resource_type: 'auto',
+        },
+        (error, uploadResult) => {
+          if (error) {
+            return reject(error);
+          }
+
+          if (!uploadResult) {
+            return reject(new Error('Cloudinary upload returned no result'));
+          }
+
+          return resolve(uploadResult);
+        }
+      );
+
+      uploadStream.end(req.file.buffer);
+    });
+
+    logger.info('Image file uploaded', {
+      fileName: req.file.originalname,
+      userId: req.user.id,
+      size: req.file.size,
+      width: result.width,
+      height: result.height
+    });
+
+    res.json({
+      secure_url: result.secure_url,
+      width: result.width,
+      height: result.height
+    });
+  } catch (err) {
+    logger.error('Image upload request failed', {
+      userId: req.user?.id,
+      fileName: req.file?.originalname,
+      error: err
+    });
+    throw internalError('Image upload failed');
+  }
+}));
 
 /**
  * @swagger
@@ -193,7 +205,7 @@ router.post('/minio-upload', auth, upload.single('image'), async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/image/save  (auth required)
-router.post('/save', auth, imageController.saveImage);
+router.post('/save', auth, asyncHandler(imageController.saveImage));
 
 /**
  * @swagger
@@ -252,7 +264,7 @@ router.post('/save', auth, imageController.saveImage);
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/image/search  (auth required)
-router.post('/search', auth, imageController.searchImages);
+router.post('/search', auth, asyncHandler(imageController.searchImages));
 
 
 /**
@@ -285,7 +297,7 @@ router.post('/search', auth, imageController.searchImages);
  *         description: Server error
  */
 // DELETE /api/image/:id (auth required)
-router.delete('/:id', auth, imageController.deleteImage);
+router.delete('/:id', auth, asyncHandler(imageController.deleteImage));
 
 
 /**
@@ -341,6 +353,6 @@ router.delete('/:id', auth, imageController.deleteImage);
  *         description: Server error
  */
 // PUT /api/image/:id (auth required)
-router.put('/:id', auth, imageController.updateImage);
+router.put('/:id', auth, asyncHandler(imageController.updateImage));
 
 export default router;

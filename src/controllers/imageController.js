@@ -1,35 +1,42 @@
 import imageModel from '../models/imageModel.js';
 import { v2 as cloudinary } from 'cloudinary';
+import { badRequest, forbidden, notFound } from '../utils/httpError.js';
+import logger from '../utils/logger.js';
 
 const imageController = {
 
   async saveImage(req, res) {
     const { title, description, keywords, height, width, imageUrl, size, isPrivate } = req.body;
 
-    try {
-      const keywordArray = keywords
-        ? keywords.split(',').map(k => k.trim()).filter(Boolean)
-        : [];
-
-      const image = await imageModel.createImage({
-        users: {
-          connect: { id: req.user.id }
-        },
-        title,
-        description,
-        image_url: imageUrl,
-        keywords: keywordArray,
-        height,
-        width,
-        size,
-        is_private: isPrivate ?? true
-      });
-
-      res.status(201).json({ image });
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
+    if (!title || !imageUrl) {
+      throw badRequest('title and imageUrl are required');
     }
+
+    const keywordArray = keywords
+      ? keywords.split(',').map(k => k.trim()).filter(Boolean)
+      : [];
+
+    const image = await imageModel.createImage({
+      users: {
+        connect: { id: req.user.id }
+      },
+      title,
+      description,
+      image_url: imageUrl,
+      keywords: keywordArray,
+      height,
+      width,
+      size,
+      is_private: isPrivate ?? true
+    });
+
+    logger.info('Image metadata saved', {
+      userId: req.user.id,
+      imageId: image.id,
+      title: image.title
+    });
+
+    res.status(201).json({ image });
   },
 
 
@@ -37,64 +44,79 @@ const imageController = {
     const { searchText = '', limit = 12, offset = 0, myLibrary = false } = req.body;
 
     const userId = req.user.id;
+    const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
 
-    try {
-      const images = await imageModel.findImagesForUser(
-        userId,
-        searchText,
-        Number(limit),
-        Number(offset),
-        myLibrary
-      );
-
-      const totalCount = await imageModel.countImagesForUser(
-        userId,
-        searchText,
-        myLibrary
-      );
-
-      res.json({
-        data: images,
-        totalCount
-      });
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
+    if (Number.isNaN(parsedLimit) || Number.isNaN(parsedOffset)) {
+      throw badRequest('limit and offset must be numbers');
     }
+
+    const images = await imageModel.findImagesForUser(
+      userId,
+      searchText,
+      parsedLimit,
+      parsedOffset,
+      myLibrary
+    );
+
+    const totalCount = await imageModel.countImagesForUser(
+      userId,
+      searchText,
+      myLibrary
+    );
+
+    logger.info('Image search executed', {
+      userId,
+      searchText,
+      limit: parsedLimit,
+      offset: parsedOffset,
+      myLibrary,
+      resultCount: images.length
+    });
+
+    res.json({
+      data: images,
+      totalCount
+    });
   },
 
 
   async deleteImage(req, res) {
     const { id } = req.params;
 
-    try {
-      const image = await imageModel.findById(id);
+    const image = await imageModel.findById(id);
 
-      if (!image) {
-        return res.status(404).json({ message: 'Image not found' });
-      }
-
-      if (String(image.user_id) !== String(req.user.id)) {
-        return res.status(403).json({ message: 'Forbidden' });
-      }
-
-      try {
-        const publicId = extractPublicIdFromUrl(image.image_url);
-
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId, {
-            resource_type: 'image'
-          });
-        }
-      } catch {}
-
-      await imageModel.deleteImage(id);
-
-      res.status(204).send();
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
+    if (!image) {
+      throw notFound('Image not found');
     }
+
+    if (String(image.user_id) !== String(req.user.id)) {
+      throw forbidden('Forbidden');
+    }
+
+    try {
+      const publicId = extractPublicIdFromUrl(image.image_url);
+
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId, {
+          resource_type: 'image'
+        });
+      }
+    } catch (err) {
+      logger.warn('Cloudinary delete failed, continuing with database delete', {
+        imageId: id,
+        userId: req.user.id,
+        error: err
+      });
+    }
+
+    await imageModel.deleteImage(id);
+
+    logger.info('Image deleted', {
+      imageId: id,
+      userId: req.user.id
+    });
+    res.status(204).send();
   },
 
 
@@ -102,33 +124,32 @@ const imageController = {
     const { id } = req.params;
     const { title, description, keywords, isPrivate } = req.body;
 
-    try {
-      const image = await imageModel.findById(id);
+    const image = await imageModel.findById(id);
 
-      if (!image) {
-        return res.status(404).json({ message: 'Image not found' });
-      }
-
-      if (String(image.user_id) !== String(req.user.id)) {
-        return res.status(403).json({ message: 'Forbidden' });
-      }
-
-      const keywordArray = keywords
-        ? keywords.split(',').map(k => k.trim()).filter(Boolean)
-        : image.keywords;
-
-      const updated = await imageModel.updateImage(id, {
-        title: title ?? image.title,
-        description: description ?? image.description,
-        keywords: keywordArray,
-        is_private: isPrivate ?? image.is_private
-      });
-
-      res.json({ image: updated });
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
+    if (!image) {
+      throw notFound('Image not found');
     }
+
+    if (String(image.user_id) !== String(req.user.id)) {
+      throw forbidden('Forbidden');
+    }
+
+    const keywordArray = keywords
+      ? keywords.split(',').map(k => k.trim()).filter(Boolean)
+      : image.keywords;
+
+    const updated = await imageModel.updateImage(id, {
+      title: title ?? image.title,
+      description: description ?? image.description,
+      keywords: keywordArray,
+      is_private: isPrivate ?? image.is_private
+    });
+
+    logger.info('Image updated', {
+      imageId: id,
+      userId: req.user.id
+    });
+    res.json({ image: updated });
   }
 
 };

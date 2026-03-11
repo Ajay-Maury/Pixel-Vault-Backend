@@ -7,6 +7,7 @@ import userRoutes from './routes/user.js';
 import imageRoutes from './routes/image.js';
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
+import logger from './utils/logger.js';
 dotenv.config();
 
 
@@ -66,7 +67,7 @@ for (const [varName, config] of Object.entries(ENV_VARS_SCHEMA)) {
 // Exit with detailed error if any variables are missing
 if (missingVars.length > 0) {
   console.error('\n' + '='.repeat(80));
-  console.error('❌ STARTUP ERROR: Missing required environment variables');
+  console.error('STARTUP ERROR: Missing required environment variables');
   console.error('='.repeat(80));
   
   missingVars.forEach((variable, index) => {
@@ -76,7 +77,7 @@ if (missingVars.length > 0) {
   });
   
   console.error('\n' + '='.repeat(80));
-  console.error('📋 How to fix:');
+  console.error('How to fix:');
   console.error('   1. Copy .env.example to .env: cp .env.example .env');
   console.error('   2. Edit .env and set all missing variables');
   console.error('   3. Save the file and restart the application');
@@ -85,32 +86,34 @@ if (missingVars.length > 0) {
   process.exit(1);
 }
 
-console.log('[INFO] Starting Pixel Vault Backend...');
-console.log(`[INFO] Node Environment: ${process.env.NODE_ENV || 'development'}`);
+logger.info('Starting Pixel Vault Backend');
+logger.info('Runtime environment loaded', {
+  nodeEnv: process.env.NODE_ENV || 'development'
+});
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+
+  res.on('finish', () => {
+    logger.info('Request completed', {
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      userId: req.user?.id
+    });
+  });
+
+  next();
+});
 
 // Swagger UI documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { 
   customCss: '.swagger-ui .topbar { display: none }',
   customSiteTitle: 'Pixel Vault API Docs'
 }));
-
-// Global error handling middleware
-app.use((err, req, res, next) => {
-  console.error('[ERROR]', {
-    timestamp: new Date().toISOString(),
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method
-  });
-  res.status(500).json({ 
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
 
 // Health check helper function
 const getHealthStatus = async () => {
@@ -125,7 +128,7 @@ const getHealthStatus = async () => {
     await prisma.$connect();
     health.database = 'UP';
   } catch (err) {
-    console.warn('[HEALTH] Database check failed:', err.message);
+    logger.warn('Health check: database unavailable', { error: err });
   }
 
   // Check Cloudinary
@@ -144,7 +147,7 @@ const getHealthStatus = async () => {
     });
     health.cloudinary = 'UP';
   } catch (err) {
-    console.warn('[HEALTH] Cloudinary check failed:', err.message);
+    logger.warn('Health check: cloudinary unavailable', { error: err });
   }
 
   return health;
@@ -206,7 +209,7 @@ app.get('/api/health', async (req, res) => {
       services: health
     });
   } catch (err) {
-    console.error('[HEALTH ERROR]', err.message);
+    logger.error('Health endpoint failed', { error: err });
     res.status(503).json({
       status: 'DOWN',
       timestamp: new Date().toISOString(),
@@ -221,6 +224,34 @@ app.get('/health', (_, res) => res.json({ status: 'ok' }));
 app.use('/api/user', userRoutes);
 app.use('/api/image', imageRoutes);
 
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
+});
+
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
+
+  logger.error('Request failed', {
+    method: req.method,
+    path: req.originalUrl,
+    statusCode,
+    userId: req.user?.id,
+    error: err
+  });
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(statusCode).json({
+    message:
+      statusCode >= 500 && process.env.NODE_ENV !== 'development'
+        ? 'Internal Server Error'
+        : err.message,
+    ...(err.details ? { details: err.details } : {})
+  });
+});
+
 const PORT = process.env.PORT;
 
 // Start server after confirming database connection
@@ -228,30 +259,32 @@ const startServer = async () => {
   try {
     await prisma.$connect();
     const server = app.listen(PORT, () => {
-      console.log(`[SUCCESS] Server running on port ${PORT}`);
-      console.log(`[INFO] API documentation available at http://localhost:${PORT}/api-docs`);
+      logger.info('Server running', { port: PORT });
+      logger.info('API documentation available', {
+        url: `http://localhost:${PORT}/api-docs`
+      });
     });
 
     // Handle graceful shutdown
     process.on('SIGTERM', () => {
-      console.log('[INFO] SIGTERM received, shutting down gracefully...');
+      logger.info('SIGTERM received, shutting down gracefully');
       server.close(async () => {
         await prisma.$disconnect();
-        console.log('[INFO] Server closed');
+        logger.info('Server closed');
         process.exit(0);
       });
     });
 
     process.on('SIGINT', () => {
-      console.log('[INFO] SIGINT received, shutting down gracefully...');
+      logger.info('SIGINT received, shutting down gracefully');
       server.close(async () => {
         await prisma.$disconnect();
-        console.log('[INFO] Server closed');
+        logger.info('Server closed');
         process.exit(0);
       });
     });
   } catch (err) {
-    console.error('[STARTUP ERROR] Failed to start server:', err.message);
+    logger.error('Failed to start server', { error: err });
     process.exit(1);
   }
 };
@@ -259,11 +292,11 @@ const startServer = async () => {
 startServer();
 
 process.on('uncaughtException', (err) => {
-  console.error('[CRITICAL ERROR] Uncaught Exception:', err);
+  logger.error('Uncaught exception', { error: err });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('[CRITICAL ERROR] Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled rejection', { promise: String(promise), reason });
   process.exit(1);
 });

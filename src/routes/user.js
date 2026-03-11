@@ -1,6 +1,7 @@
 import express from 'express';
 import userController from '../controllers/userController.js';
 import auth from '../middleware/auth.js';
+import asyncHandler from '../utils/asyncHandler.js';
 
 const router = express.Router();
 
@@ -89,7 +90,7 @@ const router = express.Router();
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/user/register
-router.post('/register', userController.register);
+router.post('/register', asyncHandler(userController.register));
 
 /**
  * @swagger
@@ -151,7 +152,7 @@ router.post('/register', userController.register);
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/user/login
-router.post('/login', userController.login);
+router.post('/login', asyncHandler(userController.login));
 
 /**
  * @swagger
@@ -200,7 +201,7 @@ router.post('/login', userController.login);
  *       500:
  *         description: Server error
  */
-router.get('/profile', auth, userController.getProfile);
+router.get('/profile', auth, asyncHandler(userController.getProfile));
 
 /**
  * @swagger
@@ -265,7 +266,7 @@ router.get('/profile', auth, userController.getProfile);
  *       500:
  *         description: Server error
  */
-router.put('/profile', auth, userController.updateProfile);
+router.put('/profile', auth, asyncHandler(userController.updateProfile));
 
 /**
  * @swagger
@@ -311,6 +312,6 @@ router.put('/profile', auth, userController.updateProfile);
  *         description: Server error
  */
 // PUT /api/user/change-password (auth required)
-router.put('/change-password', auth, userController.changePassword);
+router.put('/change-password', auth, asyncHandler(userController.changePassword));
 
 export default router;

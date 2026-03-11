@@ -1,6 +1,14 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import userModel from '../models/userModel.js';
+import {
+  badRequest,
+  conflict,
+  internalError,
+  notFound,
+  unauthorized
+} from '../utils/httpError.js';
+import logger from '../utils/logger.js';
 
 const validGenders = ['MALE', 'FEMALE', 'OTHER'];
 
@@ -10,48 +18,45 @@ const userController = {
     const { email, password, firstName, lastName = '', gender } = req.body;
 
     if (gender && !validGenders.includes(gender)) {
-      return res.status(400).json({
-        error: 'Invalid gender. Must be MALE, FEMALE, or OTHER.'
-      });
+      throw badRequest('Invalid gender. Must be MALE, FEMALE, or OTHER.');
     }
 
     if (!email || !password || !firstName || !gender) {
-      return res.status(400).json({
-        message: 'First name, gender, email and password are required'
-      });
+      throw badRequest('First name, gender, email and password are required');
     }
 
-    try {
-      const existing = await userModel.findByEmail(email.toLowerCase());
+    const normalizedEmail = email.toLowerCase();
+    const existing = await userModel.findByEmail(normalizedEmail);
 
-      if (existing) {
-        return res.status(409).json({ message: 'Email already registered' });
+    if (existing) {
+      throw conflict('Email already registered');
+    }
+
+    const password_hash = await bcrypt.hash(password, 10);
+
+    const user = await userModel.createUser({
+      email: normalizedEmail,
+      password_hash,
+      firstName,
+      lastName: lastName || null,
+      gender
+    });
+
+    logger.info('User registered', {
+      userId: user.id,
+      email: user.email
+    });
+
+    res.status(201).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        gender: user.gender,
+        created_at: user.created_at
       }
-
-      const password_hash = await bcrypt.hash(password, 10);
-
-      const user = await userModel.createUser({
-        email: email.toLowerCase(),
-        password_hash,
-        firstName,
-        lastName: lastName || null,
-        gender
-      });
-
-      res.status(201).json({
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          gender: user.gender,
-          created_at: user.created_at
-        }
-      });
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
+    });
   },
 
 
@@ -59,37 +64,39 @@ const userController = {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+      throw badRequest('Email and password are required');
     }
 
-    try {
-      const user = await userModel.findByEmail(email.toLowerCase());
+    const normalizedEmail = email.toLowerCase();
+    const user = await userModel.findByEmail(normalizedEmail);
 
-      if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
-
-      if (!process.env.JWT_SECRET) {
-        return res.status(500).json({ message: 'Server configuration error' });
-      }
-
-      const token = jwt.sign(
-        { id: user.id, email: user.email },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email
-        }
-      });
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      logger.warn('Login failed: invalid credentials', { email: normalizedEmail });
+      throw unauthorized('Invalid credentials');
     }
+
+    if (!process.env.JWT_SECRET) {
+      throw internalError('Server configuration error');
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    logger.info('User logged in', {
+      userId: user.id,
+      email: user.email
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email
+      }
+    });
   },
 
 
@@ -97,102 +104,85 @@ const userController = {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        message: 'currentPassword and newPassword required'
+      throw badRequest('currentPassword and newPassword required');
+    }
+
+    const user = await userModel.findById(req.user.id);
+
+    if (!user) {
+      throw notFound('User not found');
+    }
+
+    const match = await bcrypt.compare(
+      currentPassword,
+      user.password_hash
+    );
+
+    if (!match) {
+      logger.warn('Password change failed: incorrect current password', {
+        userId: req.user.id
       });
+      throw badRequest('Current password is incorrect');
     }
 
-    try {
-      const user = await userModel.findById(req.user.id);
+    const newHash = await bcrypt.hash(newPassword, 10);
 
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
+    await userModel.updatePassword(req.user.id, newHash);
 
-      const match = await bcrypt.compare(
-        currentPassword,
-        user.password_hash
-      );
-
-      if (!match) {
-        return res.status(400).json({
-          message: 'Current password is incorrect'
-        });
-      }
-
-      const newHash = await bcrypt.hash(newPassword, 10);
-
-      await userModel.updatePassword(req.user.id, newHash);
-
-      res.json({ message: 'Password changed successfully' });
-
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: err.message });
-    }
+    logger.info('Password changed', { userId: req.user.id });
+    res.json({ message: 'Password changed successfully' });
   },
 
 
   async getProfile(req, res) {
-    try {
-      const user = await userModel.findProfileById(req.user.id);
+    const user = await userModel.findProfileById(req.user.id);
 
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      res.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user?.firstName,
-          lastName: user?.lastName,
-          gender: user?.gender,
-          createdAt: user.created_at,
-          totalImages: user._count.images
-        }
-      });
-
-    } catch (err) {
-      res.status(500).json({ message: err.message });
+    if (!user) {
+      throw notFound('User not found');
     }
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        gender: user?.gender,
+        createdAt: user.created_at,
+        totalImages: user._count.images
+      }
+    });
   },
 
   async updateProfile(req, res) {
     const { firstName, lastName, gender } = req.body;
 
     if (!firstName || !gender) {
-      return res.status(400).json({
-        message: 'firstName and gender are required'
-      });
+      throw badRequest('firstName and gender are required');
     }
 
     if (!validGenders.includes(gender)) {
-      return res.status(400).json({
-        message: 'Invalid gender. Must be MALE, FEMALE, or OTHER.'
-      });
+      throw badRequest('Invalid gender. Must be MALE, FEMALE, or OTHER.');
     }
 
-    try {
-      const updatedUser = await userModel.updateProfile(req.user.id, {
-        firstName,
-        lastName: lastName || null,
-        gender
-      });
+    const updatedUser = await userModel.updateProfile(req.user.id, {
+      firstName,
+      lastName: lastName || null,
+      gender
+    });
 
-      res.json({
-        user: {
-          id: updatedUser.id,
-          email: updatedUser.email,
-          firstName: updatedUser.firstName,
-          lastName: updatedUser.lastName,
-          gender: updatedUser.gender,
-          createdAt: updatedUser.created_at
-        }
-      });
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
+    logger.info('Profile updated', { userId: req.user.id });
+
+    res.json({
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        gender: updatedUser.gender,
+        createdAt: updatedUser.created_at
+      }
+    });
   }
 
 };
