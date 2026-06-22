@@ -3,6 +3,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import logger from '../utils/logger.js';
 
+const MAX_IMAGE_COUNT = 40;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
 const imageController = {
 
   async saveImage(req, res) {
@@ -25,8 +28,8 @@ const imageController = {
       throw badRequest('imageUrl or imageUrls is required');
     }
 
-    if (imagePayloads.length > 20) {
-      throw badRequest('You can save a maximum of 20 images');
+    if (imagePayloads.length > MAX_IMAGE_COUNT) {
+      throw badRequest(`You can save a maximum of ${MAX_IMAGE_COUNT} images`);
     }
 
     const keywordArray = keywords
@@ -36,6 +39,10 @@ const imageController = {
     const savedImages = await Promise.all(imagePayloads.map((item) => {
       if (!item.imageUrl) {
         throw badRequest('Each image entry must include imageUrl');
+      }
+
+      if (item.size != null && Number(item.size) > MAX_IMAGE_SIZE_BYTES) {
+        throw badRequest('Each image must be 5 MB or smaller');
       }
 
       return imageModel.createImage({
@@ -89,7 +96,7 @@ const imageController = {
       myLibrary
     );
 
-    const totalCount = await imageModel.countImagesForUser(
+    const counts = await imageModel.getImageCountsForUser(
       userId,
       searchText,
       myLibrary
@@ -106,7 +113,9 @@ const imageController = {
 
     res.json({
       data: images,
-      totalCount
+      totalCount: counts.totalCount,
+      privateCount: counts.privateCount,
+      publicCount: counts.publicCount
     });
   },
 

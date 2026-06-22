@@ -204,7 +204,7 @@ Response includes a JWT token and basic user info.
 All image routes require `Authorization: Bearer <token>`.
 
 - `POST /api/image/minio-upload`
-  `multipart/form-data` with file field `image` or `images`. You can upload up to 20 files in one request.
+  `multipart/form-data` with file field `image` or `images`. You can upload up to 40 files in one request, and each image must be at most `5 MB`.
 
 Response:
 
@@ -260,6 +260,7 @@ Or for multiple images:
 ```
 
 Each uploaded image is stored as a separate database record. `title`, `description`, `keywords`, and `isPrivate` are applied to every saved image in the request. The save endpoint accepts either `imageUrl` for one image or `imageUrls` for one or many images.
+When using `imageUrls`, you can save up to 40 images and each image must be at most `5 MB`.
 
 - `POST /api/image/search`
 
@@ -272,7 +273,20 @@ Each uploaded image is stored as a separate database record. `title`, `descripti
 }
 ```
 
-`myLibrary: true` restricts results to the authenticated user's uploads. Otherwise the route returns public images.
+Response counts are not affected by pagination. `limit` and `offset` only affect the `data` array. `searchText` affects both `data` and the counts.
+
+Example response:
+
+```json
+{
+  "data": [],
+  "totalCount": 25,
+  "privateCount": 15,
+  "publicCount": 10
+}
+```
+
+`myLibrary: true` restricts results and counts to the authenticated user's uploads. Otherwise the route returns and counts public images only, so `privateCount` will be `0`.
 
 - `PUT /api/image/:id`
 

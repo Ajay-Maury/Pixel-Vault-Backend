@@ -10,7 +10,14 @@ import logger from '../utils/logger.js';
 dotenv.config();
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const MAX_IMAGE_COUNT = 40;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_IMAGE_SIZE_BYTES
+  }
+});
 
 function getUploadedFiles(req) {
   if (!req.files) {
@@ -41,7 +48,7 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  * /api/image/minio-upload:
  *   post:
  *     summary: Upload image to Cloudinary
- *     description: Upload up to 20 image files to Cloudinary and get their URLs
+ *     description: Upload up to 40 image files to Cloudinary and get their URLs. Each image must be at most 5 MB.
  *     tags:
  *       - Images
  *     security:
@@ -58,13 +65,13 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  *                 items:
  *                   type: string
  *                   format: binary
- *                 description: Up to 20 image files
+ *                 description: Up to 40 image files, each at most 5 MB
  *               images:
  *                 type: array
  *                 items:
  *                   type: string
  *                   format: binary
- *                 description: Up to 20 image files
+ *                 description: Up to 40 image files, each at most 5 MB
  *             anyOf:
  *               - required: [image]
  *               - required: [images]
@@ -101,7 +108,7 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  *                 height:
  *                   type: integer
  *       400:
- *         description: No file uploaded or too many files
+ *         description: No file uploaded, too many files, or a file exceeds 5 MB
  *         content:
  *           application/json:
  *             schema:
@@ -122,11 +129,15 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
 // POST /api/image/minio-upload  (auth required)
 router.post('/minio-upload', auth, (req, res, next) => {
   upload.fields([
-    { name: 'image', maxCount: 20 },
-    { name: 'images', maxCount: 20 }
+    { name: 'image', maxCount: MAX_IMAGE_COUNT },
+    { name: 'images', maxCount: MAX_IMAGE_COUNT }
   ])(req, res, (err) => {
     if (err) {
-      return next(badRequest('You can upload a maximum of 20 images'));
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return next(badRequest('Each image must be 5 MB or smaller'));
+      }
+
+      return next(badRequest(`You can upload a maximum of ${MAX_IMAGE_COUNT} images`));
     }
 
     return next();
@@ -138,8 +149,13 @@ router.post('/minio-upload', auth, (req, res, next) => {
     throw badRequest('No file uploaded');
   }
 
-  if (files.length > 20) {
-    throw badRequest('You can upload a maximum of 20 images');
+  if (files.length > MAX_IMAGE_COUNT) {
+    throw badRequest(`You can upload a maximum of ${MAX_IMAGE_COUNT} images`);
+  }
+
+  const oversizedFile = files.find(file => file.size > MAX_IMAGE_SIZE_BYTES);
+  if (oversizedFile) {
+    throw badRequest('Each image must be 5 MB or smaller');
   }
 
   try {
@@ -335,7 +351,13 @@ router.post('/save', auth, asyncHandler(imageController.saveImage));
  *                     $ref: '#/components/schemas/Image'
  *                 totalCount:
  *                   type: integer
- *                   description: Total number of matching images
+ *                   description: Total number of matching images, unaffected by pagination
+ *                 privateCount:
+ *                   type: integer
+ *                   description: Number of matching private images in the searched scope, unaffected by pagination
+ *                 publicCount:
+ *                   type: integer
+ *                   description: Number of matching public images in the searched scope, unaffected by pagination
  *       400:
  *         description: Invalid search parameters
  *         content:
