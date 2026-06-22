@@ -9,6 +9,19 @@ const userModel = {
     return prisma.users.create({ data });
   },
 
+  async attachPendingInvitesByEmail(email, userId) {
+    return prisma.share_group_members.updateMany({
+      where: {
+        email,
+        user_id: null,
+        status: 'PENDING'
+      },
+      data: {
+        user_id: userId
+      }
+    });
+  },
+
   async findById(id) {
     return prisma.users.findUnique({ where: { id } });
   },

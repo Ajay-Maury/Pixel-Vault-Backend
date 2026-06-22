@@ -2,6 +2,7 @@ import express from 'express';
 import auth from '../middleware/auth.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import shareGroupController from '../controllers/shareGroupController.js';
+import rateLimit from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -157,7 +158,122 @@ router.post('/invites/:memberId/reject', auth, asyncHandler(shareGroupController
  * /api/share-groups/{id}/images:
  *   get:
  *     summary: List images shared in a group
- *     description: Owners and accepted members can view the images currently shared in a group.
+ *     description: Owners and accepted members can view the images currently shared in a group. Search/filter counts are not affected by pagination.
+ *     tags:
+ *       - Share Groups
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: searchText
+ *         required: false
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: visibility
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [all, public, private]
+ *           default: all
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *       - in: query
+ *         name: offset
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Shared images
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Group not found
+ */
+router.get('/:id/images', auth, asyncHandler(shareGroupController.listGroupImages));
+
+/**
+ * @swagger
+ * /api/share-groups/{id}/images/{imageId}/download:
+ *   post:
+ *     summary: Record and return a shared image download
+ *     description: Owners and accepted members can request a shared image download. The download attempt is recorded for audit purposes.
+ *     tags:
+ *       - Share Groups
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: imageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Download recorded successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Shared image not found
+ */
+router.post('/:id/images/:imageId/download', auth, rateLimit({
+  storeKey: 'group-image-download',
+  windowMs: 60 * 1000,
+  maxRequests: 60,
+  keyFn: (req) => req.user?.id ?? req.ip
+}), asyncHandler(shareGroupController.downloadGroupImage));
+
+/**
+ * @swagger
+ * /api/share-groups/{id}/downloads/summary:
+ *   get:
+ *     summary: Get download summary for a group
+ *     description: Owner-only download summary for audit and analytics.
+ *     tags:
+ *       - Share Groups
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Download summary
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+router.get('/:id/downloads/summary', auth, asyncHandler(shareGroupController.getDownloadSummary));
+
+/**
+ * @swagger
+ * /api/share-groups/{id}/downloads:
+ *   get:
+ *     summary: Get download history for a group
+ *     description: Owner-only paginated download history for audit and analytics.
  *     tags:
  *       - Share Groups
  *     security:
@@ -185,13 +301,13 @@ router.post('/invites/:memberId/reject', auth, asyncHandler(shareGroupController
  *           default: 0
  *     responses:
  *       200:
- *         description: Shared images
+ *         description: Download history
  *       401:
  *         description: Unauthorized
- *       404:
- *         description: Group not found
+ *       403:
+ *         description: Forbidden
  */
-router.get('/:id/images', auth, asyncHandler(shareGroupController.listGroupImages));
+router.get('/:id/downloads', auth, asyncHandler(shareGroupController.getDownloadHistory));
 
 /**
  * @swagger

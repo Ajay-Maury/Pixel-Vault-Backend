@@ -306,9 +306,47 @@ const shareGroupController = {
       throw badRequest('offset must be a number greater than or equal to 0');
     }
 
-    const [groupImages, totalCount] = await Promise.all([
-      shareGroupModel.findGroupImages(group.id, parsedLimit, parsedOffset),
-      shareGroupModel.countGroupImages(group.id)
+    const searchText = String(req.query.searchText ?? '').trim();
+    const visibility = String(req.query.visibility ?? 'all').toLowerCase();
+    const keyword = String(req.query.keyword ?? '').trim();
+    const uploaderUserId = req.query.uploaderUserId ? String(req.query.uploaderUserId).trim() : undefined;
+    const sortBy = String(req.query.sortBy ?? 'addedAt').trim();
+    const sortOrder = String(req.query.sortOrder ?? 'desc').toLowerCase();
+    const fromDate = parseOptionalDate(req.query.fromDate, 'fromDate');
+    const toDate = parseOptionalDate(req.query.toDate, 'toDate');
+
+    if (!['all', 'public', 'private'].includes(visibility)) {
+      throw badRequest('visibility must be one of: all, public, private');
+    }
+
+    if (!['addedAt', 'uploadedAt', 'title', 'addedBy'].includes(sortBy)) {
+      throw badRequest('sortBy must be one of: addedAt, uploadedAt, title, addedBy');
+    }
+
+    if (!['asc', 'desc'].includes(sortOrder)) {
+      throw badRequest('sortOrder must be one of: asc, desc');
+    }
+
+    const [groupImages, counts] = await Promise.all([
+      shareGroupModel.findGroupImages(group.id, {
+        searchText,
+        visibility,
+        keyword,
+        uploaderUserId,
+        fromDate,
+        toDate,
+        sortBy,
+        sortOrder,
+        limit: parsedLimit,
+        offset: parsedOffset
+      }),
+      shareGroupModel.getGroupImageCounts(group.id, {
+        searchText,
+        keyword,
+        uploaderUserId,
+        fromDate,
+        toDate
+      })
     ]);
 
     res.json({
@@ -316,8 +354,20 @@ const shareGroupController = {
         id: group.id,
         name: group.name
       },
+      searchText,
+      keyword,
+      visibility,
+      uploaderUserId: uploaderUserId ?? null,
+      fromDate: fromDate?.toISOString() ?? null,
+      toDate: toDate?.toISOString() ?? null,
+      sortBy,
+      sortOrder,
       data: groupImages.map(formatGroupImageResponse),
-      totalCount
+      totalCount: counts.totalCount,
+      privateCount: counts.privateCount,
+      publicCount: counts.publicCount,
+      limit: parsedLimit,
+      offset: parsedOffset
     });
   },
 
@@ -380,6 +430,106 @@ const shareGroupController = {
 
     res.json({
       group: formatGroupResponse(refreshedGroup, req.user.id)
+    });
+  },
+
+  async downloadGroupImage(req, res) {
+    const groupImage = await shareGroupModel.findAccessibleGroupImage(
+      req.params.id,
+      req.params.imageId,
+      req.user.id
+    );
+
+    if (!groupImage) {
+      throw notFound('Shared image not found');
+    }
+
+    await shareGroupModel.recordGroupImageDownload({
+      group: {
+        connect: {
+          id: groupImage.group_id
+        }
+      },
+      image: {
+        connect: {
+          id: groupImage.image_id
+        }
+      },
+      downloader_user: {
+        connect: {
+          id: req.user.id
+        }
+      }
+    });
+
+    logger.info('Shared image download recorded', {
+      userId: req.user.id,
+      groupId: groupImage.group_id,
+      imageId: groupImage.image_id
+    });
+
+    res.json({
+      group: groupImage.group,
+      image: groupImage.image,
+      downloadUrl: groupImage.image.image_url
+    });
+  },
+
+  async getDownloadSummary(req, res) {
+    const group = await shareGroupModel.findOwnedGroupById(req.params.id, req.user.id);
+
+    if (!group) {
+      throw forbidden('Forbidden');
+    }
+
+    const summary = await shareGroupModel.getGroupDownloadSummary(group.id);
+
+    res.json({
+      group: {
+        id: group.id,
+        name: group.name
+      },
+      ...summary
+    });
+  },
+
+  async getDownloadHistory(req, res) {
+    const group = await shareGroupModel.findOwnedGroupById(req.params.id, req.user.id);
+
+    if (!group) {
+      throw forbidden('Forbidden');
+    }
+
+    const parsedLimit = Number(req.query.limit ?? 20);
+    const parsedOffset = Number(req.query.offset ?? 0);
+
+    if (Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      throw badRequest('limit must be a number between 1 and 100');
+    }
+
+    if (Number.isNaN(parsedOffset) || parsedOffset < 0) {
+      throw badRequest('offset must be a number greater than or equal to 0');
+    }
+
+    const [downloads, totalCount] = await Promise.all([
+      shareGroupModel.findGroupDownloadHistory(group.id, parsedLimit, parsedOffset),
+      shareGroupModel.countGroupDownloads(group.id)
+    ]);
+
+    res.json({
+      group: {
+        id: group.id,
+        name: group.name
+      },
+      data: downloads.map((download) => ({
+        id: download.id,
+        downloadedAt: download.downloaded_at,
+        downloader: download.downloader_user,
+        image: download.image
+      })),
+      totalCount,
+      limit: parsedLimit,
+      offset: parsedOffset
     });
   }
 };
@@ -532,4 +682,17 @@ function formatGroupImageResponse(groupImage) {
     addedBy: groupImage.added_by_user,
     image: groupImage.image
   };
+}
+
+function parseOptionalDate(value, fieldName) {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    throw badRequest(`${fieldName} must be a valid date`);
+  }
+
+  return date;
 }

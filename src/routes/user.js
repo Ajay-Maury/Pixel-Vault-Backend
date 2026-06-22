@@ -2,6 +2,7 @@ import express from 'express';
 import userController from '../controllers/userController.js';
 import auth from '../middleware/auth.js';
 import asyncHandler from '../utils/asyncHandler.js';
+import rateLimit from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -209,7 +210,12 @@ router.post('/login', asyncHandler(userController.login));
  *       401:
  *         description: Unauthorized
  */
-router.get('/search', auth, asyncHandler(userController.searchUsers));
+router.get('/search', auth, rateLimit({
+  storeKey: 'user-search',
+  windowMs: 60 * 1000,
+  maxRequests: 30,
+  keyFn: (req) => req.user?.id ?? req.ip
+}), asyncHandler(userController.searchUsers));
 
 /**
  * @swagger

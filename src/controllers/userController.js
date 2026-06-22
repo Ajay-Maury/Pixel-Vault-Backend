@@ -42,6 +42,8 @@ const userController = {
       gender
     });
 
+    await userModel.attachPendingInvitesByEmail(normalizedEmail, user.id);
+
     logger.info('User registered', {
       userId: user.id,
       email: user.email
