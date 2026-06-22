@@ -12,6 +12,18 @@ dotenv.config();
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+function getUploadedFiles(req) {
+  if (!req.files) {
+    return [];
+  }
+
+  if (Array.isArray(req.files)) {
+    return req.files;
+  }
+
+  return [...(req.files.image || []), ...(req.files.images || [])];
+}
+
 // Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -29,7 +41,7 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  * /api/image/minio-upload:
  *   post:
  *     summary: Upload image to Cloudinary
- *     description: Upload an image file to Cloudinary and get the URL
+ *     description: Upload up to 20 image files to Cloudinary and get their URLs
  *     tags:
  *       - Images
  *     security:
@@ -42,11 +54,20 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  *             type: object
  *             properties:
  *               image:
- *                 type: string
- *                 format: binary
- *                 description: Image file (jpg, png, gif, etc.)
- *             required:
- *               - image
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Up to 20 image files
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Up to 20 image files
+ *             anyOf:
+ *               - required: [image]
+ *               - required: [images]
  *     responses:
  *       200:
  *         description: Image uploaded successfully
@@ -55,18 +76,32 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  *             schema:
  *               type: object
  *               properties:
+ *                 uploads:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       secure_url:
+ *                         type: string
+ *                         format: uri
+ *                       width:
+ *                         type: integer
+ *                       height:
+ *                         type: integer
+ *                       size:
+ *                         type: integer
+ *                       originalName:
+ *                         type: string
  *                 secure_url:
  *                   type: string
  *                   format: uri
- *                   description: Cloudinary URL of the uploaded image
+ *                   description: Present when a single image is uploaded
  *                 width:
  *                   type: integer
- *                   description: Image width in pixels
  *                 height:
  *                   type: integer
- *                   description: Image height in pixels
  *       400:
- *         description: No file uploaded
+ *         description: No file uploaded or too many files
  *         content:
  *           application/json:
  *             schema:
@@ -85,13 +120,30 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/image/minio-upload  (auth required)
-router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (req, res) => {
-  if (!req.file) {
+router.post('/minio-upload', auth, (req, res, next) => {
+  upload.fields([
+    { name: 'image', maxCount: 20 },
+    { name: 'images', maxCount: 20 }
+  ])(req, res, (err) => {
+    if (err) {
+      return next(badRequest('You can upload a maximum of 20 images'));
+    }
+
+    return next();
+  });
+}, asyncHandler(async (req, res) => {
+  const files = getUploadedFiles(req);
+
+  if (!files.length) {
     throw badRequest('No file uploaded');
   }
 
+  if (files.length > 20) {
+    throw badRequest('You can upload a maximum of 20 images');
+  }
+
   try {
-    const result = await new Promise((resolve, reject) => {
+    const uploads = await Promise.all(files.map(file => new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: `pixelvault/${req.user.id}`,
@@ -106,30 +158,37 @@ router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (r
             return reject(new Error('Cloudinary upload returned no result'));
           }
 
-          return resolve(uploadResult);
+          return resolve({
+            secure_url: uploadResult.secure_url,
+            width: uploadResult.width,
+            height: uploadResult.height,
+            size: file.size,
+            originalName: file.originalname
+          });
         }
       );
 
-      uploadStream.end(req.file.buffer);
-    });
+      uploadStream.end(file.buffer);
+    })));
 
-    logger.info('Image file uploaded', {
-      fileName: req.file.originalname,
+    logger.info('Image files uploaded', {
       userId: req.user.id,
-      size: req.file.size,
-      width: result.width,
-      height: result.height
+      fileCount: uploads.length
     });
 
-    res.json({
-      secure_url: result.secure_url,
-      width: result.width,
-      height: result.height
-    });
+    if (uploads.length === 1) {
+      const [singleUpload] = uploads;
+      return res.json({
+        ...singleUpload,
+        uploads
+      });
+    }
+
+    return res.json({ uploads });
   } catch (err) {
     logger.error('Image upload request failed', {
       userId: req.user?.id,
-      fileName: req.file?.originalname,
+      fileCount: files.length,
       error: err
     });
     throw internalError('Image upload failed');
@@ -141,7 +200,7 @@ router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (r
  * /api/image/save:
  *   post:
  *     summary: Save image metadata to database
- *     description: Save image details and metadata after uploading
+ *     description: Save one or more uploaded image records after uploading
  *     tags:
  *       - Images
  *     security:
@@ -162,7 +221,28 @@ router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (r
  *               imageUrl:
  *                 type: string
  *                 format: uri
- *                 description: Cloudinary URL (from minio-upload)
+ *                 description: Single uploaded image URL
+ *               imageUrls:
+ *                 oneOf:
+ *                   - type: string
+ *                     format: uri
+ *                     description: Single uploaded image URL
+ *                   - type: array
+ *                     description: Multiple uploaded images to save as separate records
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         imageUrl:
+ *                           type: string
+ *                           format: uri
+ *                         width:
+ *                           type: integer
+ *                         height:
+ *                           type: integer
+ *                         size:
+ *                           type: integer
+ *                         title:
+ *                           type: string
  *               keywords:
  *                 type: string
  *                 description: Comma-separated keywords for search
@@ -180,7 +260,9 @@ router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (r
  *                 description: Whether image is private (only visible to owner)
  *             required:
  *               - title
- *               - imageUrl
+ *             anyOf:
+ *               - required: [imageUrl]
+ *               - required: [imageUrls]
  *     responses:
  *       201:
  *         description: Image metadata saved successfully
@@ -191,6 +273,10 @@ router.post('/minio-upload', auth, upload.single('image'), asyncHandler(async (r
  *               properties:
  *                 image:
  *                   $ref: '#/components/schemas/Image'
+ *                 images:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Image'
  *       401:
  *         description: Unauthorized - JWT token required
  *         content:

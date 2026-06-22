@@ -6,37 +6,67 @@ import logger from '../utils/logger.js';
 const imageController = {
 
   async saveImage(req, res) {
-    const { title, description, keywords, height, width, imageUrl, size, isPrivate } = req.body;
+    const { title, description, keywords, height, width, imageUrl, imageUrls, size, isPrivate } = req.body;
 
-    if (!title || !imageUrl) {
-      throw badRequest('title and imageUrl are required');
+    if (!title) {
+      throw badRequest('title is required');
+    }
+
+    const imagePayloads = normalizeImagePayloads({
+      imageUrl,
+      imageUrls,
+      height,
+      width,
+      size,
+      title
+    });
+
+    if (!imagePayloads.length) {
+      throw badRequest('imageUrl or imageUrls is required');
+    }
+
+    if (imagePayloads.length > 20) {
+      throw badRequest('You can save a maximum of 20 images');
     }
 
     const keywordArray = keywords
       ? keywords.split(',').map(k => k.trim()).filter(Boolean)
       : [];
 
-    const image = await imageModel.createImage({
-      users: {
-        connect: { id: req.user.id }
-      },
-      title,
-      description,
-      image_url: imageUrl,
-      keywords: keywordArray,
-      height,
-      width,
-      size,
-      is_private: isPrivate ?? true
-    });
+    const savedImages = await Promise.all(imagePayloads.map((item) => {
+      if (!item.imageUrl) {
+        throw badRequest('Each image entry must include imageUrl');
+      }
+
+      return imageModel.createImage({
+        users: {
+          connect: { id: req.user.id }
+        },
+        title: item.title ?? title,
+        description,
+        image_url: item.imageUrl,
+        keywords: keywordArray,
+        height: item.height ?? height,
+        width: item.width ?? width,
+        size: item.size ?? size,
+        is_private: isPrivate ?? true
+      });
+    }));
 
     logger.info('Image metadata saved', {
       userId: req.user.id,
-      imageId: image.id,
-      title: image.title
+      imageCount: savedImages.length,
+      title
     });
 
-    res.status(201).json({ image });
+    if (savedImages.length === 1) {
+      return res.status(201).json({
+        image: savedImages[0],
+        images: savedImages
+      });
+    }
+
+    return res.status(201).json({ images: savedImages });
   },
 
 
@@ -172,3 +202,31 @@ function extractPublicIdFromUrl(url) {
 }
 
 export default imageController;
+
+function normalizeImagePayloads({ imageUrl, imageUrls, height, width, size, title }) {
+  if (Array.isArray(imageUrls)) {
+    return imageUrls;
+  }
+
+  if (typeof imageUrls === 'string' && imageUrls.trim()) {
+    return [{
+      imageUrl: imageUrls,
+      height,
+      width,
+      size,
+      title
+    }];
+  }
+
+  if (imageUrl) {
+    return [{
+      imageUrl,
+      height,
+      width,
+      size,
+      title
+    }];
+  }
+
+  return [];
+}

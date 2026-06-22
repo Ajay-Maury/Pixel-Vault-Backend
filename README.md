@@ -204,15 +204,21 @@ Response includes a JWT token and basic user info.
 All image routes require `Authorization: Bearer <token>`.
 
 - `POST /api/image/minio-upload`
-  `multipart/form-data` with file field `image`.
+  `multipart/form-data` with file field `image` or `images`. You can upload up to 20 files in one request.
 
 Response:
 
 ```json
 {
-  "secure_url": "https://res.cloudinary.com/...",
-  "width": 1200,
-  "height": 800
+  "uploads": [
+    {
+      "secure_url": "https://res.cloudinary.com/...",
+      "width": 1200,
+      "height": 800,
+      "size": 245000,
+      "originalName": "sunset.jpg"
+    }
+  ]
 }
 ```
 
@@ -222,14 +228,38 @@ Response:
 {
   "title": "Sunset",
   "description": "Beach sunset",
-  "imageUrl": "https://res.cloudinary.com/...",
   "keywords": "sunset, beach, orange",
-  "width": 1200,
-  "height": 800,
-  "size": 245000,
+  "imageUrl": "https://res.cloudinary.com/...",
   "isPrivate": true
 }
 ```
+
+Or for multiple images:
+
+```json
+{
+  "title": "Sunset",
+  "description": "Beach sunset",
+  "keywords": "sunset, beach, orange",
+  "imageUrls": [
+    {
+      "imageUrl": "https://res.cloudinary.com/...",
+      "width": 1200,
+      "height": 800,
+      "size": 245000
+    },
+    {
+      "imageUrl": "https://res.cloudinary.com/...",
+      "width": 1000,
+      "height": 700,
+      "size": 185000
+    }
+  ],
+  "isPrivate": true
+}
+```
+
+Each uploaded image is stored as a separate database record. `title`, `description`, `keywords`, and `isPrivate` are applied to every saved image in the request. The save endpoint accepts either `imageUrl` for one image or `imageUrls` for one or many images.
 
 - `POST /api/image/search`
 
@@ -299,4 +329,3 @@ Current models:
 ## Support
 
 For issues and questions, create an issue in the repository.
-
