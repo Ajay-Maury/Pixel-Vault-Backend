@@ -180,6 +180,41 @@ Response includes a JWT token and basic user info.
 - `GET /api/user/profile`
   Requires `Authorization: Bearer <token>`.
 
+- `GET /api/user/search?email=aj&limit=10`
+  Requires `Authorization: Bearer <token>`. Returns up to 20 matching users for invite/autocomplete flows and excludes the authenticated user. The `email` query must be at least 2 characters.
+
+- `POST /api/share-groups`
+
+```json
+{
+  "name": "friends"
+}
+```
+
+Creates a share group owned by the authenticated user. Group names are limited to 10 characters and are unique per owner.
+
+- `GET /api/share-groups/my-owned`
+  Lists groups owned by the authenticated user.
+
+- `GET /api/share-groups/my-joined`
+  Lists groups where the authenticated user is an accepted member.
+
+- `GET /api/share-groups/:id`
+  Returns group details for the owner or an accepted member.
+
+- `PUT /api/share-groups/:id`
+
+```json
+{
+  "name": "family"
+}
+```
+
+Renames a group owned by the authenticated user.
+
+- `DELETE /api/share-groups/:id`
+  Deletes a group owned by the authenticated user.
+
 - `PUT /api/user/profile`
 
 ```json
@@ -287,6 +322,27 @@ Example response:
 ```
 
 `myLibrary: true` restricts results and counts to the authenticated user's uploads. Otherwise the route returns and counts public images only, so `privateCount` will be `0`.
+
+- `POST /api/image/bulk/privacy`
+
+```json
+{
+  "imageIds": ["uuid-1", "uuid-2"],
+  "isPrivate": true
+}
+```
+
+Updates privacy for up to 100 owned images in one request.
+
+- `POST /api/image/bulk/delete`
+
+```json
+{
+  "imageIds": ["uuid-1", "uuid-2"]
+}
+```
+
+Deletes up to 100 owned images in one request. Cloudinary deletion is attempted before the database records are removed.
 
 - `PUT /api/image/:id`
 

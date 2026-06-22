@@ -156,6 +156,63 @@ router.post('/login', asyncHandler(userController.login));
 
 /**
  * @swagger
+ * /api/user/search:
+ *   get:
+ *     summary: Search users by email
+ *     description: Search users for invite/autocomplete flows. Requires at least 2 characters and excludes the authenticated user.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: email
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Partial email text, minimum 2 characters
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 20
+ *           default: 10
+ *         description: Maximum number of users to return
+ *     responses:
+ *       200:
+ *         description: Matching users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 users:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       email:
+ *                         type: string
+ *                         format: email
+ *                       firstName:
+ *                         type: string
+ *                       lastName:
+ *                         type: string
+ *                         nullable: true
+ *       400:
+ *         description: Invalid search parameters
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/search', auth, asyncHandler(userController.searchUsers));
+
+/**
+ * @swagger
  * /api/user/profile:
  *   get:
  *     summary: Get authenticated user profile

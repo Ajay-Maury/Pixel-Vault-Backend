@@ -374,6 +374,81 @@ router.post('/save', auth, asyncHandler(imageController.saveImage));
 // POST /api/image/search  (auth required)
 router.post('/search', auth, asyncHandler(imageController.searchImages));
 
+/**
+ * @swagger
+ * /api/image/bulk/privacy:
+ *   post:
+ *     summary: Update privacy for multiple images
+ *     description: Update public/private visibility for multiple images owned by the authenticated user.
+ *     tags:
+ *       - Images
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               imageIds:
+ *                 type: array
+ *                 description: Up to 100 owned image IDs
+ *                 items:
+ *                   type: string
+ *               isPrivate:
+ *                 type: boolean
+ *             required:
+ *               - imageIds
+ *               - isPrivate
+ *     responses:
+ *       200:
+ *         description: Image privacy updated successfully
+ *       400:
+ *         description: Invalid request body
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: One or more images do not belong to the authenticated user
+ */
+router.post('/bulk/privacy', auth, asyncHandler(imageController.bulkUpdatePrivacy));
+
+/**
+ * @swagger
+ * /api/image/bulk/delete:
+ *   post:
+ *     summary: Delete multiple images
+ *     description: Delete multiple images owned by the authenticated user. Cloudinary delete is attempted before removing the database records.
+ *     tags:
+ *       - Images
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               imageIds:
+ *                 type: array
+ *                 description: Up to 100 owned image IDs
+ *                 items:
+ *                   type: string
+ *             required:
+ *               - imageIds
+ *     responses:
+ *       200:
+ *         description: Images deleted successfully
+ *       400:
+ *         description: Invalid request body
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: One or more images do not belong to the authenticated user
+ */
+router.post('/bulk/delete', auth, asyncHandler(imageController.bulkDeleteImages));
+
 
 /**
  * @swagger

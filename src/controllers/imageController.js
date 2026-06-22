@@ -5,6 +5,7 @@ import logger from '../utils/logger.js';
 
 const MAX_IMAGE_COUNT = 40;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_BULK_IMAGE_ACTION_COUNT = 100;
 
 const imageController = {
 
@@ -133,22 +134,7 @@ const imageController = {
       throw forbidden('Forbidden');
     }
 
-    try {
-      const publicId = extractPublicIdFromUrl(image.image_url);
-
-      if (publicId) {
-        await cloudinary.uploader.destroy(publicId, {
-          resource_type: 'image'
-        });
-      }
-    } catch (err) {
-      logger.warn('Cloudinary delete failed, continuing with database delete', {
-        imageId: id,
-        userId: req.user.id,
-        error: err
-      });
-    }
-
+    await deleteCloudinaryAssets([image], req.user.id);
     await imageModel.deleteImage(id);
 
     logger.info('Image deleted', {
@@ -156,6 +142,57 @@ const imageController = {
       userId: req.user.id
     });
     res.status(204).send();
+  },
+
+
+  async bulkUpdatePrivacy(req, res) {
+    const { imageIds, isPrivate } = req.body;
+    const normalizedImageIds = validateBulkImageIds(imageIds);
+
+    if (typeof isPrivate !== 'boolean') {
+      throw badRequest('isPrivate must be a boolean');
+    }
+
+    const images = await imageModel.findByIds(normalizedImageIds);
+    ensureOwnedImages(images, normalizedImageIds, req.user.id);
+
+    await imageModel.updateImages(normalizedImageIds, {
+      is_private: isPrivate
+    });
+
+    logger.info('Bulk image privacy updated', {
+      userId: req.user.id,
+      imageCount: normalizedImageIds.length,
+      isPrivate
+    });
+
+    res.json({
+      message: 'Image privacy updated successfully',
+      updatedCount: normalizedImageIds.length,
+      isPrivate
+    });
+  },
+
+
+  async bulkDeleteImages(req, res) {
+    const { imageIds } = req.body;
+    const normalizedImageIds = validateBulkImageIds(imageIds);
+    const images = await imageModel.findByIds(normalizedImageIds);
+
+    ensureOwnedImages(images, normalizedImageIds, req.user.id);
+
+    await deleteCloudinaryAssets(images, req.user.id);
+    await imageModel.deleteImages(normalizedImageIds);
+
+    logger.info('Bulk images deleted', {
+      userId: req.user.id,
+      imageCount: normalizedImageIds.length
+    });
+
+    res.json({
+      message: 'Images deleted successfully',
+      deletedCount: normalizedImageIds.length
+    });
   },
 
 
@@ -212,6 +249,26 @@ function extractPublicIdFromUrl(url) {
 
 export default imageController;
 
+async function deleteCloudinaryAssets(images, userId) {
+  await Promise.all(images.map(async (image) => {
+    try {
+      const publicId = extractPublicIdFromUrl(image.image_url);
+
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId, {
+          resource_type: 'image'
+        });
+      }
+    } catch (err) {
+      logger.warn('Cloudinary delete failed, continuing with database delete', {
+        imageId: image.id,
+        userId,
+        error: err
+      });
+    }
+  }));
+}
+
 function normalizeImagePayloads({ imageUrl, imageUrls, height, width, size, title }) {
   if (Array.isArray(imageUrls)) {
     return imageUrls;
@@ -238,4 +295,33 @@ function normalizeImagePayloads({ imageUrl, imageUrls, height, width, size, titl
   }
 
   return [];
+}
+
+function validateBulkImageIds(imageIds) {
+  if (!Array.isArray(imageIds) || !imageIds.length) {
+    throw badRequest('imageIds must be a non-empty array');
+  }
+
+  if (imageIds.length > MAX_BULK_IMAGE_ACTION_COUNT) {
+    throw badRequest(`You can update a maximum of ${MAX_BULK_IMAGE_ACTION_COUNT} images at a time`);
+  }
+
+  const normalizedImageIds = [...new Set(imageIds.map((id) => String(id).trim()).filter(Boolean))];
+
+  if (!normalizedImageIds.length) {
+    throw badRequest('imageIds must contain valid values');
+  }
+
+  return normalizedImageIds;
+}
+
+function ensureOwnedImages(images, requestedIds, userId) {
+  if (images.length !== requestedIds.length) {
+    throw forbidden('One or more images do not belong to you or do not exist');
+  }
+
+  const hasUnownedImage = images.some((image) => String(image.user_id) !== String(userId));
+  if (hasUnownedImage) {
+    throw forbidden('One or more images do not belong to you');
+  }
 }

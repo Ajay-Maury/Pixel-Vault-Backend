@@ -13,6 +13,30 @@ const userModel = {
     return prisma.users.findUnique({ where: { id } });
   },
 
+  async searchUsersByEmail(emailQuery, excludeUserId, limit = 10) {
+    return prisma.users.findMany({
+      where: {
+        email: {
+          contains: emailQuery,
+          mode: 'insensitive'
+        },
+        id: {
+          not: excludeUserId
+        }
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true
+      },
+      orderBy: {
+        email: 'asc'
+      },
+      take: limit
+    });
+  },
+
   async findProfileById(id) {
     return prisma.users.findUnique({
       where: { id },

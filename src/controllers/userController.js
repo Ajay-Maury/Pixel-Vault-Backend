@@ -154,6 +154,30 @@ const userController = {
     });
   },
 
+  async searchUsers(req, res) {
+    const { email = '', limit = 10 } = req.query;
+    const emailQuery = String(email).trim().toLowerCase();
+    const parsedLimit = Number(limit);
+
+    if (emailQuery.length < 2) {
+      throw badRequest('email query must be at least 2 characters');
+    }
+
+    if (Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 20) {
+      throw badRequest('limit must be a number between 1 and 20');
+    }
+
+    const users = await userModel.searchUsersByEmail(
+      emailQuery,
+      req.user.id,
+      parsedLimit
+    );
+
+    res.json({
+      users
+    });
+  },
+
   async updateProfile(req, res) {
     const { firstName, lastName, gender } = req.body;
 
