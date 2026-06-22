@@ -199,8 +199,50 @@ Creates a share group owned by the authenticated user. Group names are limited t
 - `GET /api/share-groups/my-joined`
   Lists groups where the authenticated user is an accepted member.
 
+- `GET /api/share-groups/my-invites`
+  Lists invites for the authenticated user. Use `?status=pending` to get only pending invites.
+
 - `GET /api/share-groups/:id`
   Returns group details for the owner or an accepted member.
+
+- `POST /api/share-groups/:id/invite`
+
+```json
+{
+  "emails": ["user1@example.com", "user2@example.com"]
+}
+```
+
+Invites users to a group owned by the authenticated user.
+
+- `POST /api/share-groups/invites/:memberId/accept`
+  Accepts an invite for the authenticated user.
+
+- `POST /api/share-groups/invites/:memberId/reject`
+  Rejects an invite for the authenticated user.
+
+- `GET /api/share-groups/:id/images?limit=20&offset=0`
+  Lists images shared in the group. Available to the owner and accepted members.
+
+- `POST /api/share-groups/:id/images/add`
+
+```json
+{
+  "imageIds": ["uuid-1", "uuid-2"]
+}
+```
+
+Adds owned images to the selected group.
+
+- `POST /api/share-groups/:id/images/remove`
+
+```json
+{
+  "imageIds": ["uuid-1", "uuid-2"]
+}
+```
+
+Removes images from the selected group.
 
 - `PUT /api/share-groups/:id`
 
@@ -214,6 +256,9 @@ Renames a group owned by the authenticated user.
 
 - `DELETE /api/share-groups/:id`
   Deletes a group owned by the authenticated user.
+
+- `DELETE /api/share-groups/:id/members/:memberId`
+  Removes a member or invite from a group owned by the authenticated user.
 
 - `PUT /api/user/profile`
 

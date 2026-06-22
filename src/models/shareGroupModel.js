@@ -123,6 +123,168 @@ const shareGroupModel = {
     return prisma.share_groups.delete({
       where: { id: groupId }
     });
+  },
+
+  async findMemberById(memberId) {
+    return prisma.share_group_members.findUnique({
+      where: { id: memberId },
+      include: {
+        group: {
+          include: {
+            owner: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true
+          }
+        }
+      }
+    });
+  },
+
+  async findMemberByGroupAndEmail(groupId, email) {
+    return prisma.share_group_members.findFirst({
+      where: {
+        group_id: groupId,
+        email
+      }
+    });
+  },
+
+  async createMemberInvite(data) {
+    return prisma.share_group_members.create({
+      data
+    });
+  },
+
+  async updateMember(memberId, data) {
+    return prisma.share_group_members.update({
+      where: { id: memberId },
+      data
+    });
+  },
+
+  async findPendingInvitesForUser(userId) {
+    return prisma.share_group_members.findMany({
+      where: {
+        user_id: userId,
+        status: 'PENDING'
+      },
+      include: {
+        group: {
+          include: {
+            owner: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        invited_at: 'desc'
+      }
+    });
+  },
+
+  async findAllInvitesForUser(userId) {
+    return prisma.share_group_members.findMany({
+      where: {
+        user_id: userId
+      },
+      include: {
+        group: {
+          include: {
+            owner: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        invited_at: 'desc'
+      }
+    });
+  },
+
+  async findGroupImages(groupId, limit = 20, offset = 0) {
+    return prisma.share_group_images.findMany({
+      where: {
+        group_id: groupId
+      },
+      include: {
+        image: true,
+        added_by_user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true
+          }
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      },
+      take: limit,
+      skip: offset
+    });
+  },
+
+  async countGroupImages(groupId) {
+    return prisma.share_group_images.count({
+      where: {
+        group_id: groupId
+      }
+    });
+  },
+
+  async findGroupImagesByImageIds(groupId, imageIds) {
+    return prisma.share_group_images.findMany({
+      where: {
+        group_id: groupId,
+        image_id: {
+          in: imageIds
+        }
+      }
+    });
+  },
+
+  async addImagesToGroup(entries) {
+    return prisma.share_group_images.createMany({
+      data: entries,
+      skipDuplicates: true
+    });
+  },
+
+  async removeImagesFromGroup(groupId, imageIds) {
+    return prisma.share_group_images.deleteMany({
+      where: {
+        group_id: groupId,
+        image_id: {
+          in: imageIds
+        }
+      }
+    });
   }
 };
 
