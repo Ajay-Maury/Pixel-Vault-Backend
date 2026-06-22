@@ -5,6 +5,7 @@ import swaggerSpec from './swagger.js';
 import prisma from './prisma.js';
 import userRoutes from './routes/user.js';
 import imageRoutes from './routes/image.js';
+import shareGroupRoutes from './routes/shareGroup.js';
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
 import logger from './utils/logger.js';
@@ -223,6 +224,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 app.use('/api/user', userRoutes);
 app.use('/api/image', imageRoutes);
+app.use('/api/share-groups', shareGroupRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });

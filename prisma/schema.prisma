@@ -12,6 +12,13 @@ enum Gender {
   OTHER
 }
 
+enum ShareInviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  REMOVED
+}
+
 model images {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id     String?   @db.Uuid
@@ -25,6 +32,8 @@ model images {
   is_private  Boolean?  @default(true)
   uploaded_at DateTime? @default(now()) @db.Timestamp(6)
   users       users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  share_group_images share_group_images[]
+  share_group_image_downloads share_group_image_downloads[] @relation("ShareGroupImageDownloadImage")
 }
 
 model users {
@@ -36,4 +45,61 @@ model users {
   gender        Gender
   created_at    DateTime? @default(now()) @db.Timestamp(6)
   images        images[]
+  owned_share_groups share_groups[] @relation("ShareGroupOwner")
+  invited_share_group_members share_group_members[] @relation("ShareGroupMemberUser")
+  sent_share_group_invites share_group_members[] @relation("ShareGroupInvitedByUser")
+  added_share_group_images share_group_images[] @relation("ShareGroupImageAddedByUser")
+  downloaded_share_group_images share_group_image_downloads[] @relation("ShareGroupImageDownloadedByUser")
+}
+
+model share_groups {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id String  @db.Uuid
+  name        String
+  name_key    String    @unique
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  updated_at  DateTime? @default(now()) @updatedAt @db.Timestamp(6)
+  owner       users     @relation("ShareGroupOwner", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  members     share_group_members[]
+  images      share_group_images[]
+  downloads   share_group_image_downloads[]
+}
+
+model share_group_members {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  group_id           String            @db.Uuid
+  invited_by_user_id String            @db.Uuid
+  user_id            String?           @db.Uuid
+  email              String
+  status             ShareInviteStatus @default(PENDING)
+  invited_at         DateTime?         @default(now()) @db.Timestamp(6)
+  responded_at       DateTime?         @db.Timestamp(6)
+  group              share_groups      @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  invited_by_user    users             @relation("ShareGroupInvitedByUser", fields: [invited_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user               users?            @relation("ShareGroupMemberUser", fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([group_id, email])
+}
+
+model share_group_images {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  group_id         String       @db.Uuid
+  image_id         String       @db.Uuid
+  added_by_user_id String       @db.Uuid
+  created_at       DateTime?    @default(now()) @db.Timestamp(6)
+  group            share_groups @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  image            images       @relation(fields: [image_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  added_by_user    users        @relation("ShareGroupImageAddedByUser", fields: [added_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@unique([group_id, image_id])
+}
+
+model share_group_image_downloads {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  group_id         String             @db.Uuid
+  image_id         String             @db.Uuid
+  downloader_user_id String           @db.Uuid
+  downloaded_at    DateTime?          @default(now()) @db.Timestamp(6)
+  group            share_groups       @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  image            images             @relation("ShareGroupImageDownloadImage", fields: [image_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  downloader_user  users              @relation("ShareGroupImageDownloadedByUser", fields: [downloader_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }

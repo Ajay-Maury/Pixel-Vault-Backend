@@ -58,11 +58,39 @@ const imageModel = {
   async findById(id) {
     return prisma.images.findUnique({ where: { id } });
   },
+  async findByIds(ids) {
+    return prisma.images.findMany({
+      where: {
+        id: {
+          in: ids
+        }
+      }
+    });
+  },
   async updateImage(id, data) {
     return prisma.images.update({ where: { id }, data });
   },
+  async updateImages(ids, data) {
+    return prisma.images.updateMany({
+      where: {
+        id: {
+          in: ids
+        }
+      },
+      data
+    });
+  },
   async deleteImage(id) {
     return prisma.images.delete({ where: { id } });
+  },
+  async deleteImages(ids) {
+    return prisma.images.deleteMany({
+      where: {
+        id: {
+          in: ids
+        }
+      }
+    });
   }
 };
 
