@@ -46,7 +46,7 @@ render.yaml
 
 ## Environment Variables
 
-Copy [.env.example](/Users/ajay/personal/Pixel-Vault-Backend/.env.example) to `.env` and set all required values.
+Copy [.env.example](/Users/jonh/personal/Pixel-Vault-Backend/.env.example) to `.env` and set all required values.
 
 | Variable | Required | Description |
 |---|---|---|
@@ -117,7 +117,7 @@ npm run dev
 
 ## Frontend
 
-The frontend application that integrates with this backend service can be found in the [frontend repository](https://github.com/Ajay-Maury/Pixel-Vault.git)
+The frontend application that integrates with this backend service can be found in the [frontend repository](https://github.com/Jonh-Doe/Pixel-Vault.git)
 
 ## Useful Commands
 
@@ -156,13 +156,30 @@ http://localhost:5000/api-docs
 
 - `POST /api/user/register`
 
+Request:
+
 ```json
 {
-  "firstName": "Ajay",
-  "lastName": "Kumar",
+  "firstName": "Jonh",
+  "lastName": "Doe",
   "gender": "MALE",
-  "email": "ajay@example.com",
+  "email": "jonh@example.com",
   "password": "strong-password"
+}
+```
+
+Response:
+
+```json
+{
+  "user": {
+    "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "email": "jonh@example.com",
+    "firstName": "Jonh",
+    "lastName": "Doe",
+    "gender": "MALE",
+    "created_at": "2026-06-23T09:20:10.000Z"
+  }
 }
 ```
 
@@ -170,22 +187,117 @@ If this email had pending group invites created before registration, those invit
 
 - `POST /api/user/login`
 
+Request:
+
 ```json
 {
-  "email": "ajay@example.com",
+  "email": "jonh@example.com",
   "password": "strong-password"
 }
 ```
 
-Response includes a JWT token and basic user info.
+Response:
+
+```json
+{
+  "token": "jwt-token",
+  "user": {
+    "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "email": "jonh@example.com"
+  }
+}
+```
 
 - `GET /api/user/profile`
   Requires `Authorization: Bearer <token>`.
 
+Response:
+
+```json
+{
+  "user": {
+    "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "email": "jonh@example.com",
+    "firstName": "Jonh",
+    "lastName": "Doe",
+    "gender": "MALE",
+    "createdAt": "2026-06-23T09:20:10.000Z",
+    "uploadCount": 12
+  }
+}
+```
+
+- `PUT /api/user/profile`
+
+Request:
+
+```json
+{
+  "firstName": "Jonh",
+  "lastName": "Doe",
+  "gender": "MALE"
+}
+```
+
+Response:
+
+```json
+{
+  "user": {
+    "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "email": "jonh@example.com",
+    "firstName": "Jonh",
+    "lastName": "Doe",
+    "gender": "MALE",
+    "createdAt": "2026-06-23T09:20:10.000Z"
+  }
+}
+```
+
+- `PUT /api/user/change-password`
+
+Request:
+
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "new-password"
+}
+```
+
+Response:
+
+```json
+{
+  "message": "Password changed successfully"
+}
+```
+
 - `GET /api/user/search?email=aj&limit=10`
   Requires `Authorization: Bearer <token>`. Returns up to 20 matching users for invite/autocomplete flows and excludes the authenticated user. The `email` query must be at least 2 characters. This endpoint is rate-limited.
 
+Response:
+
+```json
+{
+  "users": [
+    {
+      "id": "5d8471f6-1c44-45ef-9c4e-ec44d95cb635",
+      "email": "jonh@example.com",
+      "firstName": "Jonh",
+      "lastName": "Doe"
+    }
+  ]
+}
+```
+
+### Share Groups
+
+All share-group routes require `Authorization: Bearer <token>`.
+
 - `POST /api/share-groups`
+
+Request:
 
 ```json
 {
@@ -193,45 +305,177 @@ Response includes a JWT token and basic user info.
 }
 ```
 
-Creates a share group owned by the authenticated user. Group names are limited to 10 characters and are unique per owner.
-
-- `GET /api/share-groups/my-owned`
-  Lists groups owned by the authenticated user.
-
-- `GET /api/share-groups/my-joined`
-  Lists groups where the authenticated user is an accepted member.
-
-- `GET /api/share-groups/my-invites`
-  Lists invites for the authenticated user. Use `?status=pending` to get only pending invites.
-
-- `GET /api/share-groups/:id`
-  Returns group details for the owner or an accepted member.
-
-- `POST /api/share-groups/:id/invite`
-
-```json
-{
-  "emails": ["user1@example.com", "user2@example.com"]
-}
-```
-
-Invites users to a group owned by the authenticated user.
-
-- `POST /api/share-groups/invites/:memberId/accept`
-  Accepts an invite for the authenticated user.
-
-- `POST /api/share-groups/invites/:memberId/reject`
-  Rejects an invite for the authenticated user.
-
-- `GET /api/share-groups/:id/images?searchText=sun&keyword=sunset&visibility=all&uploaderUserId=user-id&fromDate=2026-06-01&toDate=2026-06-30&sortBy=addedAt&sortOrder=desc&limit=20&offset=0`
-  Lists images shared in the group. Available to the owner and accepted members. `searchText`, `keyword`, `uploaderUserId`, and date filters affect the returned data and the counts. `limit` and `offset` affect only the returned page.
-
-Example response:
+Response:
 
 ```json
 {
   "group": {
-    "id": "group-id",
+    "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+    "name": "friends",
+    "ownerUserId": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "isOwner": true,
+    "createdAt": "2026-06-23T10:00:00.000Z",
+    "updatedAt": "2026-06-23T10:00:00.000Z",
+    "owner": {
+      "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+      "email": "jonh@example.com",
+      "firstName": "Jonh",
+      "lastName": "Doe"
+    },
+    "imageCount": 0,
+    "memberCount": 0,
+    "inviteCounts": {
+      "pending": 0,
+      "accepted": 0,
+      "rejected": 0,
+      "removed": 0
+    },
+    "members": []
+  }
+}
+```
+
+Group names are limited to 10 characters, can contain only letters, numbers, underscores, and hyphens, and are unique per owner.
+
+- `GET /api/share-groups/my-owned`
+- `GET /api/share-groups/my-joined`
+- `GET /api/share-groups/:id`
+
+These routes return the same `group` structure shown above, wrapped as either `{ "groups": [...] }` or `{ "group": { ... } }`.
+
+- `GET /api/share-groups/my-invites`
+  Use `?status=pending` to return only pending invites.
+
+Response:
+
+```json
+{
+  "invites": [
+    {
+      "id": "member-id",
+      "email": "friend@example.com",
+      "status": "PENDING",
+      "invitedAt": "2026-06-23T10:30:00.000Z",
+      "respondedAt": null,
+      "group": {
+        "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+        "name": "friends",
+        "ownerUserId": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+        "owner": {
+          "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+          "email": "jonh@example.com",
+          "firstName": "Jonh",
+          "lastName": "Doe"
+        }
+      },
+      "user": {
+        "id": "user-1",
+        "email": "friend@example.com",
+        "firstName": "Friend",
+        "lastName": "One"
+      }
+    }
+  ]
+}
+```
+
+- `POST /api/share-groups/:id/invite`
+
+Request:
+
+```json
+{
+  "emails": ["friend1@example.com", "friend2@example.com"]
+}
+```
+
+Response:
+
+```json
+{
+  "group": {
+    "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+    "name": "friends",
+    "ownerUserId": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "isOwner": true,
+    "createdAt": "2026-06-23T10:00:00.000Z",
+    "updatedAt": "2026-06-23T10:45:00.000Z",
+    "owner": {
+      "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+      "email": "jonh@example.com",
+      "firstName": "Jonh",
+      "lastName": "Doe"
+    },
+    "imageCount": 0,
+    "memberCount": 2,
+    "inviteCounts": {
+      "pending": 2,
+      "accepted": 0,
+      "rejected": 0,
+      "removed": 0
+    },
+    "members": [
+      {
+        "id": "member-1",
+        "email": "friend1@example.com",
+        "status": "PENDING",
+        "invitedAt": "2026-06-23T10:45:00.000Z",
+        "respondedAt": null,
+        "user": {
+          "id": "user-1",
+          "firstName": "Friend",
+          "lastName": "One",
+          "email": "friend1@example.com"
+        }
+      }
+    ]
+  }
+}
+```
+
+- `POST /api/share-groups/invites/:memberId/accept`
+- `POST /api/share-groups/invites/:memberId/reject`
+
+Response:
+
+```json
+{
+  "invite": {
+    "id": "member-id",
+    "email": "friend@example.com",
+    "status": "ACCEPTED",
+    "invitedAt": "2026-06-23T10:30:00.000Z",
+    "respondedAt": "2026-06-23T10:35:00.000Z",
+    "group": {
+      "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+      "name": "friends",
+      "ownerUserId": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+      "owner": {
+        "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+        "email": "jonh@example.com",
+        "firstName": "Jonh",
+        "lastName": "Doe"
+      }
+    },
+    "user": {
+      "id": "user-1",
+      "email": "friend@example.com",
+      "firstName": "Friend",
+      "lastName": "One"
+    }
+  }
+}
+```
+
+- `GET /api/share-groups/:id/images?searchText=sun&keyword=sunset&visibility=all&uploaderUserId=user-id&fromDate=2026-06-01&toDate=2026-06-30&sortBy=addedAt&sortOrder=desc&limit=20&offset=0`
+  Lists images shared in the group. Available to the owner and accepted members. `searchText`, `keyword`, `uploaderUserId`, and date filters affect the returned data and the counts. `limit` and `offset` affect only the returned page.
+
+Response:
+
+```json
+{
+  "group": {
+    "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
     "name": "friends"
   },
   "searchText": "sun",
@@ -242,7 +486,31 @@ Example response:
   "toDate": null,
   "sortBy": "addedAt",
   "sortOrder": "desc",
-  "data": [],
+  "data": [
+    {
+      "id": "group-image-id",
+      "addedAt": "2026-06-23T11:00:00.000Z",
+      "addedBy": {
+        "id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+        "email": "jonh@example.com",
+        "firstName": "Jonh",
+        "lastName": "Doe"
+      },
+      "image": {
+        "id": "image-id",
+        "user_id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+        "title": "Sunset",
+        "description": "Beach sunset",
+        "image_url": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+        "keywords": ["sunset", "beach", "orange"],
+        "width": 1200,
+        "height": 800,
+        "size": 245000,
+        "is_private": true,
+        "uploaded_at": "2026-06-23T09:45:00.000Z"
+      }
+    }
+  ],
   "totalCount": 12,
   "privateCount": 7,
   "publicCount": 5,
@@ -253,34 +521,112 @@ Example response:
 
 - `POST /api/share-groups/:id/images/add`
 
+Request:
+
 ```json
 {
-  "imageIds": ["uuid-1", "uuid-2"]
+  "imageIds": ["image-id-1", "image-id-2"]
 }
 ```
 
-Adds owned images to the selected group.
+Response:
+Returns the updated `group` object.
 
 - `POST /api/share-groups/:id/images/remove`
 
+Request:
+
 ```json
 {
-  "imageIds": ["uuid-1", "uuid-2"]
+  "imageIds": ["image-id-1", "image-id-2"]
 }
 ```
 
-Removes images from the selected group.
+Response:
+Returns the updated `group` object.
 
 - `POST /api/share-groups/:id/images/:imageId/download`
   Records the download in the backend for audit purposes and returns the image download URL. Available to the owner and accepted members. This endpoint is rate-limited.
 
+Response:
+
+```json
+{
+  "group": {
+    "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+    "name": "friends",
+    "owner_user_id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd"
+  },
+  "image": {
+    "id": "image-id",
+    "user_id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "title": "Sunset",
+    "description": "Beach sunset",
+    "image_url": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+    "keywords": ["sunset", "beach", "orange"],
+    "width": 1200,
+    "height": 800,
+    "size": 245000,
+    "is_private": true,
+    "uploaded_at": "2026-06-23T09:45:00.000Z"
+  },
+  "downloadUrl": "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+}
+```
+
 - `GET /api/share-groups/:id/downloads/summary`
-  Owner-only download analytics summary for the group.
+
+Response:
+
+```json
+{
+  "group": {
+    "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+    "name": "friends"
+  },
+  "totalDownloads": 8,
+  "uniqueDownloaderCount": 3,
+  "uniqueDownloadedImageCount": 5
+}
+```
 
 - `GET /api/share-groups/:id/downloads?limit=20&offset=0`
-  Owner-only paginated download audit history for the group.
+
+Response:
+
+```json
+{
+  "group": {
+    "id": "5f68d7b0-4d3d-4eb4-a43b-a4484e67cfcc",
+    "name": "friends"
+  },
+  "data": [
+    {
+      "id": "download-id",
+      "downloadedAt": "2026-06-23T12:00:00.000Z",
+      "downloader": {
+        "id": "downloader-id",
+        "email": "friend@example.com",
+        "firstName": "Friend",
+        "lastName": "One"
+      },
+      "image": {
+        "id": "image-id",
+        "title": "Sunset",
+        "image_url": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+        "is_private": true
+      }
+    }
+  ],
+  "totalCount": 8,
+  "limit": 20,
+  "offset": 0
+}
+```
 
 - `PUT /api/share-groups/:id`
+
+Request:
 
 ```json
 {
@@ -288,32 +634,14 @@ Removes images from the selected group.
 }
 ```
 
-Renames a group owned by the authenticated user.
+Response:
+Returns the updated `group` object.
 
 - `DELETE /api/share-groups/:id`
   Deletes a group owned by the authenticated user.
 
 - `DELETE /api/share-groups/:id/members/:memberId`
-  Removes a member or invite from a group owned by the authenticated user.
-
-- `PUT /api/user/profile`
-
-```json
-{
-  "firstName": "Ajay",
-  "lastName": "Kumar",
-  "gender": "MALE"
-}
-```
-
-- `PUT /api/user/change-password`
-
-```json
-{
-  "currentPassword": "old-password",
-  "newPassword": "new-password"
-}
-```
+  Removes a member or invite from a group owned by the authenticated user and returns the updated `group` object.
 
 ### Images
 
@@ -326,9 +654,14 @@ Response:
 
 ```json
 {
+  "secure_url": "https://res.cloudinary.com/demo/image/upload/v1/pixelvault/user-1/sunset.jpg",
+  "width": 1200,
+  "height": 800,
+  "size": 245000,
+  "originalName": "sunset.jpg",
   "uploads": [
     {
-      "secure_url": "https://res.cloudinary.com/...",
+      "secure_url": "https://res.cloudinary.com/demo/image/upload/v1/pixelvault/user-1/sunset.jpg",
       "width": 1200,
       "height": 800,
       "size": 245000,
@@ -337,6 +670,8 @@ Response:
   ]
 }
 ```
+
+For multi-file uploads, the response is `{ "uploads": [...] }`.
 
 - `POST /api/image/save`
 
@@ -395,10 +730,24 @@ Example response:
 
 ```json
 {
-  "data": [],
+  "data": [
+    {
+      "id": "image-id",
+      "user_id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+      "title": "Sunset",
+      "description": "Beach sunset",
+      "image_url": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+      "keywords": ["sunset", "beach", "orange"],
+      "width": 1200,
+      "height": 800,
+      "size": 245000,
+      "is_private": false,
+      "uploaded_at": "2026-06-23T09:45:00.000Z"
+    }
+  ],
   "totalCount": 25,
-  "privateCount": 15,
-  "publicCount": 10
+  "privateCount": 0,
+  "publicCount": 25
 }
 ```
 
@@ -415,6 +764,16 @@ Example response:
 
 Updates privacy for up to 100 owned images in one request.
 
+Response:
+
+```json
+{
+  "message": "Image privacy updated successfully",
+  "updatedCount": 2,
+  "isPrivate": true
+}
+```
+
 - `POST /api/image/bulk/delete`
 
 ```json
@@ -425,6 +784,15 @@ Updates privacy for up to 100 owned images in one request.
 
 Deletes up to 100 owned images in one request. Cloudinary deletion is attempted before the database records are removed.
 
+Response:
+
+```json
+{
+  "message": "Images deleted successfully",
+  "deletedCount": 2
+}
+```
+
 - `PUT /api/image/:id`
 
 ```json
@@ -433,6 +801,26 @@ Deletes up to 100 owned images in one request. Cloudinary deletion is attempted 
   "description": "Updated description",
   "keywords": "tag1, tag2",
   "isPrivate": false
+}
+```
+
+Response:
+
+```json
+{
+  "image": {
+    "id": "image-id",
+    "user_id": "7e55f5fa-0b33-48e6-8d61-66c7f17ad9cd",
+    "title": "Updated title",
+    "description": "Updated description",
+    "image_url": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+    "keywords": ["tag1", "tag2"],
+    "width": 1200,
+    "height": 800,
+    "size": 245000,
+    "is_private": false,
+    "uploaded_at": "2026-06-23T09:45:00.000Z"
+  }
 }
 ```
 
